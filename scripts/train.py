@@ -8,6 +8,7 @@ import sys
 import utils
 from utils import device
 from model import ACModel
+from visual_transformer import CausalVisionTransformer
 
 
 # Parse arguments
@@ -110,7 +111,6 @@ if __name__ == "__main__":
     txt_logger.info("Training status loaded\n")
 
     # Load observations preprocessor
-
     obs_space, preprocess_obss = utils.get_obss_preprocessor(envs[0].observation_space)
     if "vocab" in status:
         preprocess_obss.vocab.load_vocab(status["vocab"])
@@ -118,9 +118,21 @@ if __name__ == "__main__":
 
     # Load model
 
-    acmodel = ACModel(obs_space, envs[0].action_space, args.mem, args.text)
-    if "model_state" in status:
-        acmodel.load_state_dict(status["model_state"])
+    # acmodel = ACModel(obs_space, envs[0].action_space, args.mem, args.text)
+    # if "model_state" in status:
+    #     acmodel.load_state_dict(status["model_state"])
+    acmodel = CausalVisionTransformer(
+        in_channels=obs_space["image"][2],
+        out_channels=32,
+        kernel_size=3,
+        obs_space=obs_space,
+        action_space=envs[0].action_space,
+        d_model=10,
+        nhead=1,
+        d_hid=10,
+        nlayers=2,
+        max_len=7
+    )
     acmodel.to(device)
     txt_logger.info("Model loaded\n")
     txt_logger.info("{}\n".format(acmodel))
@@ -135,6 +147,10 @@ if __name__ == "__main__":
         algo = torch_ac.PPOAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                                 args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                                 args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
+
+    # elif args.algo =='pure_supervised':
+
+
     else:
         raise ValueError("Incorrect algorithm name: {}".format(args.algo))
 
