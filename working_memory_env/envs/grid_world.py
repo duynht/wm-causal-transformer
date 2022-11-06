@@ -42,7 +42,7 @@ class DMTSGridEnv(MiniGridEnv):
 
         self.asked = False
 
-        max_steps = self._rand_int(3, 8)
+        max_steps = self._rand_int(3, 9)
 
         # Can't set both grid_size and width/height
         if grid_size:
@@ -68,7 +68,8 @@ class DMTSGridEnv(MiniGridEnv):
         self.observation_space = spaces.Dict(
             {
                 "image": image_observation_space,
-                "asked": spaces.Discrete(2)
+                "asked": spaces.Discrete(2),
+                "goal": spaces.Discrete(self.width * self.height + 1),
             }
         )
 
@@ -87,6 +88,7 @@ class DMTSGridEnv(MiniGridEnv):
 
         self.agent_pos = None
         self.agent_dir = None
+        self.goal_pos = self.pending_action
 
     def _gen_obj(self, obj_type, is_goal=False):
         if obj_type == "circle":
@@ -113,7 +115,8 @@ class DMTSGridEnv(MiniGridEnv):
         if self.asked:
             for obj_type in self.obj_list:
                 obj = self._gen_obj(obj_type, is_goal=(obj_type == self.target_type))
-                self.place_obj(obj)
+                x, y = self.place_obj(obj)
+                self.goal_pos = y * self.height + x
         else:
             self.place_obj(self._gen_obj(self.target_type))
 
@@ -140,7 +143,7 @@ class DMTSGridEnv(MiniGridEnv):
         # - an image (omnipotent view of the environment)
         # - task trigger
 
-        obs = {"image": image, "asked": self.asked}
+        obs = {"image": image, "asked": self.asked, "goal": self.goal_pos}
 
         return obs
 
@@ -165,7 +168,7 @@ class DMTSGridEnv(MiniGridEnv):
         terminated = False
         truncated = False
         if action != self.pending_action:
-            self.agent_pos = ((action % self.grid.width), (action // self.grid.height))
+            self.agent_pos = ((action % self.grid.height), (action // self.grid.height))
             self.agent_dir = True
             selected_cell = self.grid.get(*self.agent_pos)
 
@@ -187,6 +190,8 @@ class DMTSGridEnv(MiniGridEnv):
         # Initialize the RNG if the seed is manually passed
         if seed is not None:
             self._np_random, seed = seeding.np_random(seed)
+
+        self.goal_pos = self.pending_action
 
         self.obj_list = self._rand_subset(self.obj_types, 2)
         self.target_type = self.obj_list[0]

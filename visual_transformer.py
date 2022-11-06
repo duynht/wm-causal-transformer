@@ -6,6 +6,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.utils.data import dataset
+from torch.distributions.categorical import Categorical
 
 
 # class PositionalEncoding(nn.Module):
@@ -71,11 +72,9 @@ class CausalVisionTransformer(nn.Module):
         dropout: float = 0.5,
     ):
         super().__init__()
-        # breakpoint()
         # assert d_model % max_len == 0
-        # self.mem_size = d_model // max_len
-        self.memory_size = max_len
-        self.mem_size = d_model
+        # self.memory_size = d_model // max_len
+        self.memory_size = d_model
         self.naction = action_space.n
         self.d_model = d_model
 
@@ -83,22 +82,22 @@ class CausalVisionTransformer(nn.Module):
 
         n = obs_space["image"][0]
         m = obs_space["image"][1]
-        flatten_dim = out_channels * (n - (kernel_size - 1))**2 * (m - (kernel_size - 1))**2
+        flatten_dim = out_channels * (n - (kernel_size - 1)) * (m - (kernel_size - 1))
 
-        # self.conv_encoder = nn.Sequential(
-        #     nn.Conv2d(in_channels, out_channels, kernel_size),
-        #     nn.ReLU(),
-        #     nn.Flatten(),
-        #     nn.Linear(flatten_dim, self.mem_size),
-        #     nn.Tanh()
-        # )
+        self.conv_encoder = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(flatten_dim, self.memory_size),
+            nn.Tanh()
+        )
         
-        self.conv_encoder = nn.Conv2d(in_channels, out_channels, kernel_size)
-        self.relu = nn.ReLU()
-        self.flatten = nn.Flatten()
-        self.lin = nn.Linear(flatten_dim, self.mem_size)
-        self.flatten_dim = flatten_dim
-        self.tanh = nn.Tanh()
+        # self.conv_encoder = nn.Conv2d(in_channels, out_channels, kernel_size)
+        # self.relu = nn.ReLU()
+        # self.flatten = nn.Flatten()
+        # self.lin = nn.Linear(flatten_dim, self.memory_size)
+        # self.flatten_dim = flatten_dim
+        # self.tanh = nn.Tanh()
 
         # self.encoder = nn.Embedding(ntoken, d_model)
 
@@ -107,7 +106,7 @@ class CausalVisionTransformer(nn.Module):
         self.transf_encoder = TransformerEncoder(transf_encoder_layers, nlayers)
         self.decoder = nn.Sequential(
             nn.Linear(d_model, self.naction),
-            nn.Softmax()
+            nn.Softmax(dim=1)
         )
 
  
@@ -139,7 +138,7 @@ class CausalVisionTransformer(nn.Module):
 
         self.decoder.apply(weights_init)
 
-    def forward(self, obs, memory, src_mask: Tensor = None, straight_through: bool = False, return_embed: bool = False) -> Tensor:
+    def forward(self, obs, memory, step, src_mask: Tensor = None, return_embed: bool = False) -> Tensor:
         """
         Args:
             memory: Tensor, shape [seq_len, batch_size, d_model]
@@ -152,41 +151,37 @@ class CausalVisionTransformer(nn.Module):
         """
 
         # assert not (straight_through and return_embed)
-        breakpoint()
         x = obs.image.permute(0, 3, 1, 2) # batch, channel, width, height
-        # x = self.conv_encoder(x) * math.sqrt(self.d_model) # batch, d_model
-
-        x = self.conv_encoder(x)
-        x = self.relu(x)
-        x = self.flatten(x)
-        x = self.lin(x)
-        x = self.tanh(x)
-        x = x * math.sqrt(self.d_model)
+        x = self.conv_encoder(x) * math.sqrt(self.d_model) # batch, d_model
 
         # self.conv_memory = torch.cat(self.conv_memory, embed)
-        memory[:, self.mem_size * obs.step : self.mem_size * (obs.step + 1)] += x # batch, seq_len * d_model
-        x = memory[:-self.max_len].view(memory.shape[0], self.max_len, -1).transpose(0, 1) # seq_len, batch, d_model
+        memory[step] = x
+        # memory[:, self.memory_size * obs.step[0] : self.memory_size * (obs.step[0] + 1)] += x # batch, seq_len * d_model
+        # x = memory[:-self.max_len].view(memory.shape[0], self.max_len, -1).transpose(0, 1) # seq_len, batch, d_model
         # memory = torch.cat(memory, embed)
 
         # if not straight_through:
 
             # src = self.encoder(src) * math.sqrt(self.d_model)
             
-        embed = self.pos_encoder(x)
+        embed = self.pos_encoder(memory)
         if src_mask:
             embed = self.transf_encoder(embed, src_mask)
         else:
             embed = self.transf_encoder(embed)
         output = self.decoder(embed)
 
-        output = output.transpose(0, 1)
+        # output = output.transpose(0, 1)
+        # if torch.sum(obs.asked):
+        #     breakpoint()
+        output = output[step]
+        # def_action = F.one_hot(torch.ones_like(output[:, 0]), num_classes=self.naction)
+        def_action = F.one_hot(torch.full(output[:, 0].shape, self.naction - 1)).to(output.device)
 
-        def_action = F.one_hot(torch.ones_like(output[:, 0]), num_classes=self.naction)
-
-        pick_mask = obs.asked
-        drop_mask = 1 - pick_mask
-
-        output = output  - (output * drop_mask).detach() + def_action * pick_mask
+        pick_mask = obs.asked.unsqueeze(1).expand(obs.asked.shape[0], self.naction)
+        drop_mask = ~pick_mask
+        drop_mask = drop_mask.to(output.device)
+        output = output - (output * drop_mask).detach() + def_action * drop_mask
         
         # self.conv_memory = torch.empty((0, self.d_model))
 
@@ -199,6 +194,9 @@ class CausalVisionTransformer(nn.Module):
         #         t.append(F.one_hot(torch.tensor([probs.shape[1] - 1])).squeeze())
         
         # probs = torch.stack(t).float().to(probs.device)
+        # breakpoint()
+        # if return_dist:
+        output = Categorical(probs=output)
         
         if return_embed:
             return output, memory, embed

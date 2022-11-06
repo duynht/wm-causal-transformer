@@ -62,9 +62,12 @@ parser.add_argument("--recurrence", type=int, default=1,
                     help="number of time-steps gradient is backpropagated (default: 1). If > 1, a LSTM is added to the model to have memory.")
 parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model to handle text input")
+parser.add_argument("--device", default="cpu")
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    device = args.device
 
     args.mem = args.recurrence > 1
 
@@ -131,7 +134,7 @@ if __name__ == "__main__":
         nhead=1,
         d_hid=10,
         nlayers=2,
-        max_len=7
+        max_len=8
     )
     acmodel.to(device)
     txt_logger.info("Model loaded\n")
@@ -147,6 +150,26 @@ if __name__ == "__main__":
         algo = torch_ac.PPOAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                                 args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                                 args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
+
+    elif args.algo == 'dmts':
+        algo = torch_ac.DMTSAlgo(
+            envs, 
+            acmodel, 
+            device,
+            args.frames_per_proc, 
+            args.discount, 
+            args.lr, 
+            args.gae_lambda,
+            args.entropy_coef, 
+            args.value_loss_coef, 
+            args.max_grad_norm, 
+            args.recurrence,
+            args.optim_eps, 
+            args.clip_eps, 
+            args.epochs, 
+            args.batch_size,
+            preprocess_obss
+        )
 
     # elif args.algo =='pure_supervised':
 
@@ -167,46 +190,51 @@ if __name__ == "__main__":
     while num_frames < args.frames:
         # Update model parameters
         update_start_time = time.time()
-        exps, logs1 = algo.collect_experiences()
-        logs2 = algo.update_parameters(exps)
-        logs = {**logs1, **logs2}
+        # exps, logs1 = algo.collect_experiences()
+        # logs2 = algo.update_parameters(exps)
+        # logs = {**logs1, **logs2}
+        train_log = algo.update()
         update_end_time = time.time()
 
-        num_frames += logs["num_frames"]
         update += 1
+        # tb_writer.add_scalar('Loss', utils.synthesize(train_log['loss']).values(), update)
+        tb_writer.add_scalar('Loss', train_log['loss'], update)
+        # tb_writer.add_scalar('Accuracy', utils.synthesize(train_log('acc')).values(), update)
+        tb_writer.add_scalar('Accuracy', train_log['acc'], update)
+        num_frames += train_log["num_frames"]
 
         # Print logs
 
-        if update % args.log_interval == 0:
-            fps = logs["num_frames"] / (update_end_time - update_start_time)
-            duration = int(time.time() - start_time)
-            return_per_episode = utils.synthesize(logs["return_per_episode"])
-            rreturn_per_episode = utils.synthesize(logs["reshaped_return_per_episode"])
-            num_frames_per_episode = utils.synthesize(logs["num_frames_per_episode"])
+        # if update % args.log_interval == 0:
+        #     fps = logs["num_frames"] / (update_end_time - update_start_time)
+        #     duration = int(time.time() - start_time)
+        #     return_per_episode = utils.synthesize(logs["return_per_episode"])
+        #     rreturn_per_episode = utils.synthesize(logs["reshaped_return_per_episode"])
+        #     num_frames_per_episode = utils.synthesize(logs["num_frames_per_episode"])
 
-            header = ["update", "frames", "FPS", "duration"]
-            data = [update, num_frames, fps, duration]
-            header += ["rreturn_" + key for key in rreturn_per_episode.keys()]
-            data += rreturn_per_episode.values()
-            header += ["num_frames_" + key for key in num_frames_per_episode.keys()]
-            data += num_frames_per_episode.values()
-            header += ["entropy", "value", "policy_loss", "value_loss", "grad_norm"]
-            data += [logs["entropy"], logs["value"], logs["policy_loss"], logs["value_loss"], logs["grad_norm"]]
+        #     # header = ["update", "frames", "FPS", "duration"]
+        #     # data = [update, num_frames, fps, duration]
+        #     # header += ["rreturn_" + key for key in rreturn_per_episode.keys()]
+        #     # data += rreturn_per_episode.values()
+        #     # header += ["num_frames_" + key for key in num_frames_per_episode.keys()]
+        #     # data += num_frames_per_episode.values()
+        #     # header += ["entropy", "value", "policy_loss", "value_loss", "grad_norm"]
+        #     # data += [logs["entropy"], logs["value"], logs["policy_loss"], logs["value_loss"], logs["grad_norm"]]
 
-            txt_logger.info(
-                "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f}"
-                .format(*data))
+        #     txt_logger.info(
+        #         "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f}"
+        #         .format(*data))
 
-            header += ["return_" + key for key in return_per_episode.keys()]
-            data += return_per_episode.values()
+        #     header += ["return_" + key for key in return_per_episode.keys()]
+        #     data += return_per_episode.values()
 
-            if status["num_frames"] == 0:
-                csv_logger.writerow(header)
-            csv_logger.writerow(data)
-            csv_file.flush()
+        #     if status["num_frames"] == 0:
+        #         csv_logger.writerow(header)
+        #     csv_logger.writerow(data)
+        #     csv_file.flush()
 
-            for field, value in zip(header, data):
-                tb_writer.add_scalar(field, value, num_frames)
+        #     for field, value in zip(header, data):
+        #         tb_writer.add_scalar(field, value, num_frames)
 
         # Save status
 
