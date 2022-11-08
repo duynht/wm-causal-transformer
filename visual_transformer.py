@@ -106,7 +106,7 @@ class CausalVisionTransformer(nn.Module):
         self.transf_encoder = TransformerEncoder(transf_encoder_layers, nlayers)
         self.decoder = nn.Sequential(
             nn.Linear(d_model, self.naction),
-            nn.Softmax(dim=1)
+            # nn.Softmax(dim=1)
         )
 
  
@@ -138,8 +138,9 @@ class CausalVisionTransformer(nn.Module):
         # self.decoder.weight.data.uniform_(-initrange, initrange)
 
         self.decoder.apply(weights_init)
+        self.step = 0
 
-    def forward(self, obs, memory, step, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
+    def forward(self, obs, memory, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
         """
         Args:
             memory: Tensor, shape [seq_len, batch_size, d_model]
@@ -155,7 +156,9 @@ class CausalVisionTransformer(nn.Module):
         x = self.conv_encoder(x) * math.sqrt(self.d_model) # batch, d_model
 
         # self.conv_memory = torch.cat(self.conv_memory, embed)
-        memory[step] = x
+        
+        memory[self.step % self.max_len] = x
+        self.step += 1
         # memory[:, self.memory_size * obs.step[0] : self.memory_size * (obs.step[0] + 1)] += x # batch, seq_len * d_model
         # x = memory[:-self.max_len].view(memory.shape[0], self.max_len, -1).transpose(0, 1) # seq_len, batch, d_model
         # memory = torch.cat(memory, embed)
@@ -179,14 +182,14 @@ class CausalVisionTransformer(nn.Module):
         # output = output.transpose(0, 1)
         # if torch.sum(obs.asked):
         #     breakpoint()
-        output = output[step]
+        # output = output[step]
         # def_action = F.one_hot(torch.ones_like(output[:, 0]), num_classes=self.naction)
-        def_action = F.one_hot(torch.full(output[:, 0].shape, self.naction - 1)).to(output.device)
+        # def_action = F.one_hot(torch.full(output[:, 0].shape, self.naction - 1)).to(output.device)
 
-        pick_mask = obs.asked.unsqueeze(1).expand(obs.asked.shape[0], self.naction)
-        drop_mask = ~pick_mask
-        drop_mask = drop_mask.to(output.device)
-        output = output - (output * drop_mask).detach() + def_action * drop_mask
+        # pick_mask = obs.asked.unsqueeze(1).expand(obs.asked.shape[0], self.naction)
+        # drop_mask = ~pick_mask
+        # drop_mask = drop_mask.to(output.device)
+        # output = output - (output * drop_mask).detach() + def_action * drop_mask
         
         # self.conv_memory = torch.empty((0, self.d_model))
 
@@ -201,10 +204,10 @@ class CausalVisionTransformer(nn.Module):
         # probs = torch.stack(t).float().to(probs.device)
         # breakpoint()
         if return_dist:
-            output = Categorical(probs=output)
+            output = Categorical(logits=output[-1])
         
         if return_embed:
-            return output, memory, embed
+            return output, memory, embed[-1]
         
         return output, memory,
 

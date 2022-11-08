@@ -156,21 +156,17 @@ class DMTSAlgo(ABC):
         goal = F.one_hot(torch.full((self.num_frames_per_proc, self.num_procs), self.acmodel.naction - 1)).float().to(self.device)
         for i in range(self.num_frames_per_proc):
             preprocessed_obs = self.preprocess_obss(self.obs, device=self.device)
-
-            # logits, self.memories = self.acmodel(preprocessed_obs, self.memories, i, self.attn_mask, return_dist=False)
             
-            # action = torch.argmax(logits[i], dim=1)
-            # goal[i] = F.one_hot(preprocessed_obs.goal).float().to(self.device)
+            logits, self.memories = self.acmodel(preprocessed_obs, self.memories, i, self.attn_mask, return_dist=False)
+            
+            action = torch.argmax(logits[i], dim=1)
+            goal[i] = F.one_hot(preprocessed_obs.goal).float().to(self.device)
+            # action = dist.sample()
+            # logits = dist.logits
 
-            # batch_loss += self.loss_fn(logits[:i+1], goal[:i+1].clone())
-
-            dist, self.memories = self.acmodel(preprocessed_obs, self.memories, i, self.attn_mask)
-            action = dist.sample()
-            logits = dist.logits
-
-            batch_loss += self.loss_fn(logits, preprocessed_obs.goal)
+            # batch_loss += self.loss_fn(action, preprocessed_obs.goal)
             # breakpoint()
-
+            batch_loss += self.loss_fn(logits[:i+1], goal[:i+1].clone())
             
             acc += torch.sum(action == preprocessed_obs.goal).item()
 

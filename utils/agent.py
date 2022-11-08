@@ -33,7 +33,8 @@ class Agent:
         self.num_envs = num_envs
 
         if self.acmodel.recurrent:
-            self.memories = torch.zeros(self.num_envs, self.acmodel.memory_size, device=device)
+            # self.memories = torch.zeros(self.num_envs, self.acmodel.memory_size, device=device)
+            self.memories = torch.zeros(self.acmodel.max_len, self.num_envs, self.acmodel.memory_size, device=device)
 
         self.acmodel.load_state_dict(utils.get_model_state(model_dir))
         self.acmodel.to(device)
@@ -46,14 +47,15 @@ class Agent:
 
         with torch.no_grad():
             if self.acmodel.recurrent:
-                dist, _, self.memories = self.acmodel(preprocessed_obss, self.memories)
+                dist, self.memories, = self.acmodel(preprocessed_obss, self.memories, return_dist=(not self.argmax))
             else:
-                dist, _ = self.acmodel(preprocessed_obss)
+                dist, _ = self.acmodel(preprocessed_obss, return_dist=(~self.argmax))
 
         if self.argmax:
-            actions = dist.probs.max(1, keepdim=True)[1]
+            # actions = dist.probs.max(1, keepdim=True)[1]
+            actions = torch.argmax(dist[-1], dim=1)
         else:
-            actions = dist.sample()
+            actions = dist.sample()[-1]
 
         return actions.cpu().numpy()
 
