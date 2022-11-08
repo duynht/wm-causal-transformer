@@ -4,7 +4,11 @@ import utils
 from .other import device
 from model import ACModel
 from visual_transformer import CausalVisionTransformer
+from torch import Tensor
 
+def generate_square_subsequent_mask(sz: int) -> Tensor:
+    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
+    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
 class Agent:
     """An agent.
@@ -42,25 +46,33 @@ class Agent:
         if hasattr(self.preprocess_obss, "vocab"):
             self.preprocess_obss.vocab.load_vocab(utils.get_vocab(model_dir))
 
-    def get_actions(self, obss):
+        self.attn_mask = generate_square_subsequent_mask(self.acmodel.max_len).to(device)
+
+    def get_actions(self, obss, step):
+        # breakpoint()
         preprocessed_obss = self.preprocess_obss(obss, device=device)
 
         with torch.no_grad():
+            
             if self.acmodel.recurrent:
-                dist, self.memories, = self.acmodel(preprocessed_obss, self.memories, return_dist=(not self.argmax))
+                dist, self.memories, = self.acmodel(preprocessed_obss, self.memories, step, self.attn_mask, return_dist=(not self.argmax))
             else:
-                dist, _ = self.acmodel(preprocessed_obss, return_dist=(~self.argmax))
+                dist, _ = self.acmodel(preprocessed_obss, attn_mask=self.attn_mask, return_dist=(~self.argmax))
 
         if self.argmax:
             # actions = dist.probs.max(1, keepdim=True)[1]
-            actions = torch.argmax(dist[-1], dim=1)
+            actions = torch.argmax(dist[step], dim=1)
         else:
-            actions = dist.sample()[-1]
+            actions = dist.sample()
+
+        # if preprocessed_obss.asked:
+        #     breakpoint()
+        #     print((self.acmodel.step - 1) % self.acmodel.max_len, ':', actions)
 
         return actions.cpu().numpy()
 
-    def get_action(self, obs):
-        return self.get_actions([obs])[0]
+    def get_action(self, obs, step):
+        return self.get_actions([obs], step)
 
     def analyze_feedbacks(self, rewards, dones):
         if self.acmodel.recurrent:

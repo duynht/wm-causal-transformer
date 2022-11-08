@@ -138,9 +138,8 @@ class CausalVisionTransformer(nn.Module):
         # self.decoder.weight.data.uniform_(-initrange, initrange)
 
         self.decoder.apply(weights_init)
-        self.step = 0
 
-    def forward(self, obs, memory, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
+    def forward(self, obs, memory, step, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
         """
         Args:
             memory: Tensor, shape [seq_len, batch_size, d_model]
@@ -157,8 +156,7 @@ class CausalVisionTransformer(nn.Module):
 
         # self.conv_memory = torch.cat(self.conv_memory, embed)
         
-        memory[self.step % self.max_len] = x
-        self.step += 1
+        memory[step] = x
         # memory[:, self.memory_size * obs.step[0] : self.memory_size * (obs.step[0] + 1)] += x # batch, seq_len * d_model
         # x = memory[:-self.max_len].view(memory.shape[0], self.max_len, -1).transpose(0, 1) # seq_len, batch, d_model
         # memory = torch.cat(memory, embed)
@@ -204,10 +202,10 @@ class CausalVisionTransformer(nn.Module):
         # probs = torch.stack(t).float().to(probs.device)
         # breakpoint()
         if return_dist:
-            output = Categorical(logits=output[-1])
+            output = Categorical(logits=output[step])
         
         if return_embed:
-            return output, memory, embed[-1]
+            return output, memory, embed[step]
         
         return output, memory,
 

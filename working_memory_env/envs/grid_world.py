@@ -42,8 +42,6 @@ class DMTSGridEnv(MiniGridEnv):
 
         self.asked = False
 
-        max_steps = self._rand_int(3, 9)
-
         # Can't set both grid_size and width/height
         if grid_size:
             assert width is None and height is None
@@ -53,7 +51,7 @@ class DMTSGridEnv(MiniGridEnv):
         # Environment configuration
         self.width = width
         self.height = height
-        self.max_steps = max_steps
+        self.max_steps = self._rand_int(3, 9)
 
         self.action_space = spaces.Discrete(self.width * self.height + 1)
         self.pending_action = self.width * self.height
@@ -111,14 +109,14 @@ class DMTSGridEnv(MiniGridEnv):
 
     def _gen_grid(self, width, height, empty=False):
         self.grid = DMTSGrid(width, height)
-
-        if self.asked:
-            for obj_type in self.obj_list:
-                obj = self._gen_obj(obj_type, is_goal=(obj_type == self.target_type))
-                x, y = self.place_obj(obj)
-                self.goal_pos = y * self.height + x
-        else:
-            self.place_obj(self._gen_obj(self.target_type))
+        if not empty:
+            if self.asked:
+                for obj_type in self.obj_list:
+                    obj = self._gen_obj(obj_type, is_goal=(obj_type == self.target_type))
+                    x, y = self.place_obj(obj)
+                    self.goal_pos = y * self.height + x
+            else:
+                self.place_obj(self._gen_obj(self.target_type))
 
     def get_frame(self, tile_size=TILE_PIXELS):
         # Render the whole grid
@@ -193,6 +191,8 @@ class DMTSGridEnv(MiniGridEnv):
 
         self.goal_pos = self.pending_action
 
+        self.max_steps = self._rand_int(3, 9)
+
         self.obj_list = self._rand_subset(self.obj_types, 2)
         self.target_type = self.obj_list[0]
 
@@ -248,8 +248,8 @@ class DMTSGrid(Grid):
             key = (agent_dir, highlight, tile_size)
             key = obj.encode() + key if obj else key
 
-            if key in cls.tile_cache:
-                return cls.tile_cache[key]
+            # if key in cls.tile_cache:
+            #     return cls.tile_cache[key]
 
             img = np.zeros(
                 shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
