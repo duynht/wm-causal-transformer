@@ -7,6 +7,11 @@ import numpy
 import torch
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
+from torch import Tensor
+
+def generate_square_subsequent_mask(sz: int) -> Tensor:
+    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
+    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
 class DMTSAlgo(ABC):
     """The base class for RL algorithms."""
@@ -136,26 +141,37 @@ class DMTSAlgo(ABC):
         self.batch_num = 0
 
         self.loss_fn = CrossEntropyLoss()
+        self.attn_mask = generate_square_subsequent_mask(self.num_frames_per_proc).to(self.device)
 
     def update(self):
-        
+        self.env.reset()
         acc = 0
         batch_loss = 0
 
         if self.acmodel.recurrent:
             # self.memory = torch.zeros(shape[1], self.acmodel.memory_size, device=self.device)
             self.memories = torch.zeros(self.num_frames_per_proc, self.num_procs, self.acmodel.memory_size, device=self.device)
-
+            # self.drop_mask = torch.zeros(self.num_frames_per_proc, self.num_procs, self.acmodel.d_model, device=self.device))
+        
+        goal = F.one_hot(torch.full((self.num_frames_per_proc, self.num_procs), self.acmodel.naction - 1)).float().to(self.device)
         for i in range(self.num_frames_per_proc):
             preprocessed_obs = self.preprocess_obss(self.obs, device=self.device)
 
-            dist, self.memories = self.acmodel(preprocessed_obs, self.memories, i)
-            # action = torch.argmax(logits, dim=1)
+            # logits, self.memories = self.acmodel(preprocessed_obs, self.memories, i, self.attn_mask, return_dist=False)
+            
+            # action = torch.argmax(logits[i], dim=1)
+            # goal[i] = F.one_hot(preprocessed_obs.goal).float().to(self.device)
+
+            # batch_loss += self.loss_fn(logits[:i+1], goal[:i+1].clone())
+
+            dist, self.memories = self.acmodel(preprocessed_obs, self.memories, i, self.attn_mask)
             action = dist.sample()
             logits = dist.logits
 
-            # batch_loss += self.loss_fn(action, preprocessed_obs.goal)
             batch_loss += self.loss_fn(logits, preprocessed_obs.goal)
+            # breakpoint()
+
+            
             acc += torch.sum(action == preprocessed_obs.goal).item()
 
             obs, reward, terminated, truncated, _ = self.env.step(action.cpu().numpy())
@@ -167,9 +183,12 @@ class DMTSAlgo(ABC):
             self.obs = obs
             self.memories[i] = self.memories[i] * self.mask.unsqueeze(1)
 
+        # breakpoint()
+        # batch_loss = self.loss_fn(logits, goal)
+
         self.optimizer.zero_grad()
-        batch_loss.backward(retain_graph=True)
-        self.optimizer.step
+        batch_loss.backward()
+        self.optimizer.step()
 
         acc /= (self.num_procs * self.num_frames_per_proc)
 

@@ -112,6 +112,7 @@ class CausalVisionTransformer(nn.Module):
  
         # self.conv_memory = torch.empty((0, d_model))
         self.recurrent = True
+        self.max_len = max_len
 
         self.init_weights()
 
@@ -138,7 +139,7 @@ class CausalVisionTransformer(nn.Module):
 
         self.decoder.apply(weights_init)
 
-    def forward(self, obs, memory, step, src_mask: Tensor = None, return_embed: bool = False) -> Tensor:
+    def forward(self, obs, memory, step, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
         """
         Args:
             memory: Tensor, shape [seq_len, batch_size, d_model]
@@ -149,7 +150,6 @@ class CausalVisionTransformer(nn.Module):
         Returns:
             output Tensor of shape [batch_size, naction]
         """
-
         # assert not (straight_through and return_embed)
         x = obs.image.permute(0, 3, 1, 2) # batch, channel, width, height
         x = self.conv_encoder(x) * math.sqrt(self.d_model) # batch, d_model
@@ -163,10 +163,15 @@ class CausalVisionTransformer(nn.Module):
         # if not straight_through:
 
             # src = self.encoder(src) * math.sqrt(self.d_model)
+
+        # drop_mask[step] = torch.tensor(obs.asked).to(drop_mask.device)
+
+        
+        # causal_mask = causal_mask.unsqueeze(1).expand()
             
         embed = self.pos_encoder(memory)
-        if src_mask:
-            embed = self.transf_encoder(embed, src_mask)
+        if attn_mask is not None:
+            embed = self.transf_encoder(embed, attn_mask)
         else:
             embed = self.transf_encoder(embed)
         output = self.decoder(embed)
@@ -195,8 +200,8 @@ class CausalVisionTransformer(nn.Module):
         
         # probs = torch.stack(t).float().to(probs.device)
         # breakpoint()
-        # if return_dist:
-        output = Categorical(probs=output)
+        if return_dist:
+            output = Categorical(probs=output)
         
         if return_embed:
             return output, memory, embed
@@ -204,8 +209,3 @@ class CausalVisionTransformer(nn.Module):
         return output, memory,
 
         # return output,
-
-
-def generate_square_subsequent_mask(sz: int) -> Tensor:
-    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
-    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
