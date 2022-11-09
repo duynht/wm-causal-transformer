@@ -151,7 +151,7 @@ class CausalVisionTransformer(nn.Module):
             output Tensor of shape [batch_size, naction]
         """
         # assert not (straight_through and return_embed)
-        x = obs.image.permute(0, 3, 1, 2) # batch, channel, width, height
+        x = obs.image # batch, channel, width, height
         x = self.conv_encoder(x) * math.sqrt(self.d_model) # batch, d_model
 
         # self.conv_memory = torch.cat(self.conv_memory, embed)

@@ -9,6 +9,7 @@ import utils
 from utils import device
 from model import ACModel
 from visual_transformer import CausalVisionTransformer
+from working_memory_env.envs.grid_world import DMTSGridEnv
 
 
 # Parse arguments
@@ -34,34 +35,18 @@ parser.add_argument("--frames", type=int, default=10**7,
                     help="number of frames of training (default: 1e7)")
 
 # Parameters for main algorithm
-parser.add_argument("--epochs", type=int, default=4,
-                    help="number of epochs for PPO (default: 4)")
-parser.add_argument("--batch-size", type=int, default=256,
-                    help="batch size for PPO (default: 256)")
-parser.add_argument("--frames-per-proc", type=int, default=None,
-                    help="number of frames per process before update (default: 5 for A2C and 128 for PPO)")
-parser.add_argument("--discount", type=float, default=0.99,
-                    help="discount factor (default: 0.99)")
+parser.add_argument("--grid-size", type=int, default=256,
+                    help="square grid size")
+parser.add_argument("d_model", type=int, default=10,
+                    help="transformer embedding size")
+parser.add_argument("nlayers", type=int, default=2,
+                    help="transformer MLP layers")
+parser.add_argument("max-delay-frames", type=int, default=5,
+                    help="maximum number of delay frames per episode")
+# parser.add_argument("--frames-per-proc", type=int, default=None,
+#                     help="number of frames per process before update (default: 5 for A2C and 128 for PPO)")
 parser.add_argument("--lr", type=float, default=0.001,
                     help="learning rate (default: 0.001)")
-parser.add_argument("--gae-lambda", type=float, default=0.95,
-                    help="lambda coefficient in GAE formula (default: 0.95, 1 means no gae)")
-parser.add_argument("--entropy-coef", type=float, default=0.01,
-                    help="entropy term coefficient (default: 0.01)")
-parser.add_argument("--value-loss-coef", type=float, default=0.5,
-                    help="value loss term coefficient (default: 0.5)")
-parser.add_argument("--max-grad-norm", type=float, default=0.5,
-                    help="maximum norm of gradient (default: 0.5)")
-parser.add_argument("--optim-eps", type=float, default=1e-8,
-                    help="Adam and RMSprop optimizer epsilon (default: 1e-8)")
-parser.add_argument("--optim-alpha", type=float, default=0.99,
-                    help="RMSprop optimizer alpha (default: 0.99)")
-parser.add_argument("--clip-eps", type=float, default=0.2,
-                    help="clipping epsilon for PPO (default: 0.2)")
-parser.add_argument("--recurrence", type=int, default=1,
-                    help="number of time-steps gradient is backpropagated (default: 1). If > 1, a LSTM is added to the model to have memory.")
-parser.add_argument("--text", action="store_true", default=False,
-                    help="add a GRU to the model to handle text input")
 parser.add_argument("--device", default="cpu")
 
 if __name__ == "__main__":
@@ -69,12 +54,12 @@ if __name__ == "__main__":
 
     device = args.device
 
-    args.mem = args.recurrence > 1
+    # args.mem = args.recurrence > 1
 
     # Set run dir
 
     date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    default_model_name = f"{args.env}_{args.algo}_seed{args.seed}_{date}"
+    default_model_name = f"{args.grid_size}x{args.grid_size}_{args.algo}_seed{args.seed}_{date}"
 
     model_name = args.model or default_model_name
     model_dir = utils.get_model_dir(model_name)
@@ -102,7 +87,11 @@ if __name__ == "__main__":
 
     envs = []
     for i in range(args.procs):
-        envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+        # envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+        envs.append(DMTSGridEnv(
+            grid_size=args.grid_size,
+            max_delay=args.max_delay_frames,
+        ))
     txt_logger.info("Environments loaded\n")
 
     # Load training status
@@ -115,9 +104,6 @@ if __name__ == "__main__":
 
     # Load observations preprocessor
     obs_space, preprocess_obss = utils.get_obss_preprocessor(envs[0].observation_space)
-    if "vocab" in status:
-        preprocess_obss.vocab.load_vocab(status["vocab"])
-    txt_logger.info("Observations preprocessor loaded")
 
     # Load model
 
@@ -130,11 +116,11 @@ if __name__ == "__main__":
         kernel_size=3,
         obs_space=obs_space,
         action_space=envs[0].action_space,
-        d_model=10,
-        nhead=1,
-        d_hid=10,
-        nlayers=2,
-        max_len=8
+        d_model=args.d_model,
+        nhead=args.nhead,
+        d_hid=args.d_model,
+        nlayers=args.nlayers,
+        max_len=args.max_delay_frames+3
     )
     acmodel.to(device)
     txt_logger.info("Model loaded\n")
@@ -142,33 +128,14 @@ if __name__ == "__main__":
 
     # Load algo
 
-    if args.algo == "a2c":
-        algo = torch_ac.A2CAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
-                                args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
-                                args.optim_alpha, args.optim_eps, preprocess_obss)
-    elif args.algo == "ppo":
-        algo = torch_ac.PPOAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
-                                args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
-                                args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
-
-    elif args.algo == 'dmts':
+    if args.algo == 'dmts':
         algo = torch_ac.DMTSAlgo(
             envs, 
             acmodel, 
             device,
-            args.frames_per_proc, 
-            args.discount, 
+            args.max_delay_frames + 3, 
             args.lr, 
-            args.gae_lambda,
-            args.entropy_coef, 
-            args.value_loss_coef, 
-            args.max_grad_norm, 
-            args.recurrence,
-            args.optim_eps, 
-            args.clip_eps, 
-            args.epochs, 
-            args.batch_size,
-            preprocess_obss
+            preprocess_obss=preprocess_obss
         )
 
     # elif args.algo =='pure_supervised':

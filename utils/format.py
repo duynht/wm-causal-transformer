@@ -5,7 +5,7 @@ import re
 import torch
 import torch_ac
 import gymnasium as gym
-
+import torchvision.transforms.functional as VF
 import utils
 
 
@@ -44,7 +44,9 @@ def get_obss_preprocessor(obs_space):
 def preprocess_images(images, device=None):
     # Bug of Pytorch: very slow if not first converted to numpy array
     images = numpy.array(images)
-    return torch.tensor(images, device=device, dtype=torch.float)
+    images =  torch.tensor(images, device=device, dtype=torch.float)
+    images = images.permute(0, 3, 1, 2)
+    return VF.normalize(images, (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
 
 
 def preprocess_texts(texts, vocab, device=None):

@@ -32,7 +32,7 @@ class DMTSGridEnv(MiniGridEnv):
         grid_size: int = None,
         width: int = None,
         height: int = None, 
-        max_steps: Optional[int] = None, 
+        max_delay: Optional[int] = 5, 
         render_mode: Optional[str] = None,
         tile_size: int = TILE_PIXELS, 
     ):
@@ -51,7 +51,7 @@ class DMTSGridEnv(MiniGridEnv):
         # Environment configuration
         self.width = width
         self.height = height
-        self.max_steps = self._rand_int(3, 9)
+        self.max_steps = self._rand_int(3, 3 + max_delay + 1)
 
         self.action_space = spaces.Discrete(self.width * self.height + 1)
         self.pending_action = self.width * self.height
@@ -246,10 +246,10 @@ class DMTSGrid(Grid):
 
             # Hash map lookup key for the cache
             key = (agent_dir, highlight, tile_size)
-            key = obj.encode() + key if obj else key
+            key = (obj.color, obj.type, obj.scale) + key if obj else key
 
-            # if key in cls.tile_cache:
-            #     return cls.tile_cache[key]
+            if key in cls.tile_cache:
+                return cls.tile_cache[key]
 
             img = np.zeros(
                 shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
