@@ -17,10 +17,10 @@ from working_memory_env.envs.grid_world import DMTSGridEnv
 parser = argparse.ArgumentParser()
 
 # General parameters
-parser.add_argument("--algo", required=True,
-                    help="algorithm to use: a2c | ppo (REQUIRED)")
-parser.add_argument("--env", required=True,
-                    help="name of the environment to train on (REQUIRED)")
+# parser.add_argument("--algo", required=True,
+#                     help="algorithm to use: a2c | ppo (REQUIRED)")
+# parser.add_argument("--env", required=True,
+#                     help="name of the environment to train on (REQUIRED)")
 parser.add_argument("--model", default=None,
                     help="name of the model (default: {ENV}_{ALGO}_{TIME})")
 parser.add_argument("--seed", type=int, default=1,
@@ -35,7 +35,9 @@ parser.add_argument("--frames", type=int, default=10**7,
                     help="number of frames of training (default: 1e7)")
 
 # Parameters for main algorithm
-parser.add_argument("--grid-size", type=int, default=256,
+parser.add_argument("--tile-size", type=int, default=4,
+                    help="size of each cell in term of pixels")
+parser.add_argument("--grid-size", type=int, default=4,
                     help="square grid size")
 parser.add_argument("d_model", type=int, default=10,
                     help="transformer embedding size")
@@ -59,7 +61,7 @@ if __name__ == "__main__":
     # Set run dir
 
     date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    default_model_name = f"{args.grid_size}x{args.grid_size}_{args.algo}_seed{args.seed}_{date}"
+    default_model_name = f"{args.grid_size}x{args.grid_size}_{args.tile_size}_seed{args.seed}_{date}"
 
     model_name = args.model or default_model_name
     model_dir = utils.get_model_dir(model_name)
@@ -91,6 +93,7 @@ if __name__ == "__main__":
         envs.append(DMTSGridEnv(
             grid_size=args.grid_size,
             max_delay=args.max_delay_frames,
+            tile_size=args.tile_size
         ))
     txt_logger.info("Environments loaded\n")
 
@@ -128,21 +131,21 @@ if __name__ == "__main__":
 
     # Load algo
 
-    if args.algo == 'dmts':
-        algo = torch_ac.DMTSAlgo(
-            envs, 
-            acmodel, 
-            device,
-            args.max_delay_frames + 3, 
-            args.lr, 
-            preprocess_obss=preprocess_obss
-        )
+    # if args.algo == 'dmts':
+    algo = torch_ac.DMTSAlgo(
+        envs, 
+        acmodel, 
+        device,
+        args.max_delay_frames + 3, 
+        args.lr, 
+        preprocess_obss=preprocess_obss
+    )
 
     # elif args.algo =='pure_supervised':
 
 
-    else:
-        raise ValueError("Incorrect algorithm name: {}".format(args.algo))
+    # else:
+    #     raise ValueError("Incorrect algorithm name: {}".format(args.algo))
 
     if "optimizer_state" in status:
         algo.optimizer.load_state_dict(status["optimizer_state"])

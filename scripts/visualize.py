@@ -9,8 +9,8 @@ from working_memory_env.envs.grid_world import DMTSGridEnv
 # Parse arguments
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--env", required=True,
-                    help="name of the environment to be run (REQUIRED)")
+# parser.add_argument("--env", required=True,
+#                     help="name of the environment to be run (REQUIRED)")
 parser.add_argument("--model", required=True,
                     help="name of the trained model (REQUIRED)")
 parser.add_argument("--seed", type=int, default=0,
@@ -25,13 +25,15 @@ parser.add_argument("--gif", type=str, default=None,
                     help="store output as gif with the given filename")
 parser.add_argument("--episodes", type=int, default=1000000,
                     help="number of episodes to visualize")
-parser.add_argument("--grid-size", type=int, default=256,
+parser.add_argument("--tile-size", type=int, default=4,
+                    help="size of each cell in term of pixels")
+parser.add_argument("--grid-size", type=int, default=4,
                     help="square grid size")
-parser.add_argument("d_model", type=int, default=10,
+parser.add_argument("--d_model", type=int, default=10,
                     help="transformer embedding size")
-parser.add_argument("nlayers", type=int, default=2,
+parser.add_argument("--nlayers", type=int, default=2,
                     help="transformer MLP layers")
-parser.add_argument("max-delay-frames", type=int, default=5,
+parser.add_argument("--max-delay-frames", type=int, default=5,
                     help="maximum number of delay frames per episode")
 
 args = parser.parse_args()
@@ -50,6 +52,8 @@ print(f"Device: {device}\n")
 env = DMTSGridEnv(
         grid_size=args.grid_size,
         max_delay=args.max_delay_frames,
+        tile_size=args.tile_size,
+        render_mode="human"
     )
 for _ in range(args.shift):
     env.reset()
@@ -58,8 +62,7 @@ print("Environment loaded\n")
 # Load agent
 
 model_dir = utils.get_model_dir(args.model)
-agent = utils.Agent(env.observation_space, env.action_space, model_dir,
-                    argmax=args.argmax)
+agent = utils.Agent(env.observation_space, env.action_space, model_dir, args)
 print("Agent loaded\n")
 
 # Run the agent

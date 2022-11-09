@@ -10,8 +10,8 @@ from working_memory_env.envs.grid_world import DMTSGridEnv
 # Parse arguments
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--env", required=True,
-                    help="name of the environment (REQUIRED)")
+# parser.add_argument("--env", required=True,
+#                     help="name of the environment (REQUIRED)")
 parser.add_argument("--model", required=True,
                     help="name of the trained model (REQUIRED)")
 parser.add_argument("--episodes", type=int, default=100,
@@ -66,8 +66,7 @@ if __name__ == "__main__":
 
     model_dir = utils.get_model_dir(args.model)
     agent = utils.Agent(env.observation_space, env.action_space, model_dir,
-                        argmax=args.argmax, num_envs=args.procs,
-                        use_memory=args.memory, use_text=args.text)
+                        argmax=args.argmax, num_envs=args.procs)
     print("Agent loaded\n")
 
     # Initialize logs

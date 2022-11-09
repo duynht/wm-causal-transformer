@@ -251,13 +251,20 @@ class DMTSGrid(Grid):
             if key in cls.tile_cache:
                 return cls.tile_cache[key]
 
-            img = np.zeros(
-                shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
+            # img = np.zeros(
+            #     shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
+            # )
+            img = np.full(
+                shape=(tile_size * subdivs, tile_size * subdivs, 3),
+                fill_value=255,
+                dtype=np.uint8
             )
 
             # Draw the grid lines (top and left edges)
-            fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
-            fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
+            # fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
+            # fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
+            fill_coords(img, point_in_rect(0, 0.031, 0, 1), (0, 0, 0))
+            fill_coords(img, point_in_rect(0, 1, 0, 0.031), (0, 0, 0))
 
             if obj is not None:
                 obj.render(img)

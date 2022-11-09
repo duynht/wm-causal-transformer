@@ -17,8 +17,7 @@ class Agent:
     - to choose an action given an observation,
     - to analyze the feedback (i.e. reward and done state) of its action."""
 
-    def __init__(self, obs_space, action_space, model_dir,
-                 argmax=False, num_envs=1, use_memory=False, use_text=False):
+    def __init__(self, obs_space, action_space, model_dir, args, num_envs=1):
         obs_space, self.preprocess_obss = utils.get_obss_preprocessor(obs_space)
         # self.acmodel = ACModel(obs_space, action_space, use_memory=use_memory, use_text=use_text)
         self.acmodel = CausalVisionTransformer(
@@ -27,13 +26,13 @@ class Agent:
             kernel_size=3,
             obs_space=obs_space,
             action_space=action_space,
-            d_model=10,
-            nhead=1,
-            d_hid=10,
-            nlayers=2,
-            max_len=8
+            d_model=args.d_model,
+            nhead=args.nhead,
+            d_hid=args.d_model,
+            nlayers=args.nlayers,
+            max_len=args.max_delay_frames
         )
-        self.argmax = argmax
+        self.argmax = args.argmax
         self.num_envs = num_envs
 
         if self.acmodel.recurrent:
@@ -61,12 +60,16 @@ class Agent:
 
         if self.argmax:
             # actions = dist.probs.max(1, keepdim=True)[1]
-            actions = torch.argmax(dist[step], dim=1)
+            actions = torch.argmax(dist[step][:, :-1], dim=1)
         else:
             actions = dist.sample()
 
-        # if preprocessed_obss.asked:
-        #     breakpoint()
+        actions = actions.squeeze()
+
+        if not preprocessed_obss.asked:
+            actions = torch.tensor([16])
+        else:
+            breakpoint()
         #     print((self.acmodel.step - 1) % self.acmodel.max_len, ':', actions)
 
         return actions.cpu().numpy()
