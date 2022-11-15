@@ -118,7 +118,7 @@ class DMTSGridEnv(MiniGridEnv):
             else:
                 self.place_obj(self._gen_obj(self.target_type))
 
-    def get_frame(self, tile_size=TILE_PIXELS):
+    def get_frame(self, tile_size):
         # Render the whole grid
         img = self.grid.render(
             tile_size,
@@ -135,7 +135,7 @@ class DMTSGridEnv(MiniGridEnv):
         """
 
         # image = self.grid.encode()
-        image = self.get_frame()
+        image = self.get_frame(tile_size=self.tile_size)
         
         # Observations are dictionaries containing:
         # - an image (omnipotent view of the environment)
@@ -217,7 +217,7 @@ class DMTSGridEnv(MiniGridEnv):
 
     def render(self):
 
-        img = self.get_frame()
+        img = self.get_frame(tile_size=self.tile_size)
 
         if self.render_mode == "human":
             if self.window is None:
@@ -246,7 +246,7 @@ class DMTSGrid(Grid):
 
             # Hash map lookup key for the cache
             key = (agent_dir, highlight, tile_size)
-            key = (obj.color, obj.type, obj.scale) + key if obj else key
+            key = (obj.color * 10, obj.type * 10, obj.scale * 10) + key if obj else key
 
             if key in cls.tile_cache:
                 return cls.tile_cache[key]

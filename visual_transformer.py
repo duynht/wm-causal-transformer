@@ -70,6 +70,11 @@ class CausalVisionTransformer(nn.Module):
         nlayers: int, # 2
         max_len: int, # 5
         dropout: float = 0.5,
+        n_conv_layers: int = 4,
+        pooling_kernel_size = 3,
+        pooling_stride = 2,
+        pooling_padding = 1
+        
     ):
         super().__init__()
         # assert d_model % max_len == 0
@@ -79,18 +84,50 @@ class CausalVisionTransformer(nn.Module):
         self.d_model = d_model
 
         self.model_type = 'Transformer'
-
+        
         n = obs_space["image"][0]
         m = obs_space["image"][1]
-        flatten_dim = out_channels * (n - (kernel_size - 1)) * (m - (kernel_size - 1))
+        for _ in range(n_conv_layers):
+            n = (n - (kernel_size - 1))
+            m = (m - (kernel_size - 1))
+            n = math.floor((n + 2 * pooling_padding - pooling_kernel_size) / pooling_stride) + 1 
+            m = math.floor((m + 2 * pooling_padding - pooling_kernel_size) / pooling_stride) + 1 
+            
+        flatten_dim = out_channels * n * m
+        
+        # self.conv_encoder = nn.Sequential(
+        #     nn.Conv2d(in_channels, out_channels, kernel_size),
+        #     # nn.ReLU(),
+        #     nn.Flatten(),
+        #     nn.Linear(flatten_dim, self.memory_size),
+        #     # nn.Tanh()
+        # )
+        
+        n_filter_list = [in_channels] + \
+                        [out_channels for _ in range(n_conv_layers - 1)] + \
+                        [out_channels]
 
         self.conv_encoder = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size),
-            nn.ReLU(),
+            *[nn.Sequential(
+                nn.Conv2d(
+                        n_filter_list[i], n_filter_list[i + 1],
+                        kernel_size=(kernel_size, kernel_size)
+                        # stride=(stride, stride),
+                        # padding=(padding, padding), bias=conv_bias
+                ),
+                # nn.Identity() if activation is None else activation(),
+                nn.MaxPool2d(
+                        kernel_size=pooling_kernel_size,
+                        stride=pooling_stride,
+                        padding=pooling_padding,
+                        ) # if max_pool else nn.Identity()
+            )
+                for i in range(n_conv_layers)
+            ],
             nn.Flatten(),
             nn.Linear(flatten_dim, self.memory_size),
-            nn.Tanh()
         )
+
         
         # self.conv_encoder = nn.Conv2d(in_channels, out_channels, kernel_size)
         # self.relu = nn.ReLU()
@@ -114,15 +151,17 @@ class CausalVisionTransformer(nn.Module):
         self.recurrent = True
         self.max_len = max_len
 
+        self.memories = None
+
         self.init_weights()
 
     def init_weights(self) -> None:
         def weights_init(m):
             if isinstance(m, nn.Conv2d):
-                torch.nn.init.xavier_uniform_(m.weight)
+                torch.nn.init.kaiming_normal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
             elif isinstance(m, nn.Linear):
-                torch.nn.init.uniform_(m.weight)
+                torch.nn.init.trunc_normal_(m.weight)
                 torch.nn.init.zeros_(m.bias)
 
         initrange = 0.1
@@ -139,7 +178,14 @@ class CausalVisionTransformer(nn.Module):
 
         self.decoder.apply(weights_init)
 
-    def forward(self, obs, memory, step, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
+    def reset_memory(self):
+        self.memories = None
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+    def forward(self, img, step, attn_mask: Tensor = None, return_embed: bool = False, return_dist: bool = True) -> Tensor:
         """
         Args:
             memory: Tensor, shape [seq_len, batch_size, d_model]
@@ -151,12 +197,25 @@ class CausalVisionTransformer(nn.Module):
             output Tensor of shape [batch_size, naction]
         """
         # assert not (straight_through and return_embed)
-        x = obs.image # batch, channel, width, height
+        # x = img # batch, channel, width, height
+        x = img.reshape(-1, *img.shape[-3:]) # batch*time, channel, width, height
         x = self.conv_encoder(x) * math.sqrt(self.d_model) # batch, d_model
+        x = x.reshape(*img.shape[:2], *x.shape[1:])
 
         # self.conv_memory = torch.cat(self.conv_memory, embed)
-        
-        memory[step] = x
+        # if step == 0:
+        #     breakpoint()
+
+        # breakpoint()
+        # if self.memories is None:
+        #     self.memories = torch.cat([x.unsqueeze(0), torch.zeros((self.max_len - step - 1, *x.shape), device=self.device)], dim=0)
+        # else:
+        #     self.memories = torch.cat([self.memories, x.unsqueeze(0), torch.zeros((self.max_len - step - 1, *x.shape), device=self.device)], dim=0)
+
+        # memory[step] = x
+        # for i, elem in enumerate(x.data):
+        #     memory[step].data[i] = elem
+
         # memory[:, self.memory_size * obs.step[0] : self.memory_size * (obs.step[0] + 1)] += x # batch, seq_len * d_model
         # x = memory[:-self.max_len].view(memory.shape[0], self.max_len, -1).transpose(0, 1) # seq_len, batch, d_model
         # memory = torch.cat(memory, embed)
@@ -170,13 +229,22 @@ class CausalVisionTransformer(nn.Module):
         
         # causal_mask = causal_mask.unsqueeze(1).expand()
             
-        embed = self.pos_encoder(memory)
+        # embed = self.pos_encoder(self.memories)
+        embed = self.pos_encoder(x)
+        # embed = x
+        # embed = self.memories
+        # embed = x.unsqueeze(0).expand(self.max_len, *x.shape)
         if attn_mask is not None:
             embed = self.transf_encoder(embed, attn_mask)
         else:
             embed = self.transf_encoder(embed)
+            
+        # breakpoint()
+        
+        # self.memories = embed[:step+1].detach()
+        
         output = self.decoder(embed)
-
+        
         # output = output.transpose(0, 1)
         # if torch.sum(obs.asked):
         #     breakpoint()
@@ -201,12 +269,26 @@ class CausalVisionTransformer(nn.Module):
         
         # probs = torch.stack(t).float().to(probs.device)
         # breakpoint()
+
+        # self.memories = self.memories[:step+1]
+        output = output.permute(1, 2, 0)
+
         if return_dist:
-            output = Categorical(logits=output[step])
+            output = Categorical(logits=output)
         
         if return_embed:
-            return output, memory, embed[step]
+            return output, embed
         
-        return output, memory,
+        return output, 
 
         # return output,
+
+
+def show_params(model):
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(name, param.data)
+
+def generate_square_subsequent_mask(sz: int) -> Tensor:
+    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
+    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)

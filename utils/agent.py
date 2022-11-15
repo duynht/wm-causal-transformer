@@ -30,7 +30,7 @@ class Agent:
             nhead=args.nhead,
             d_hid=args.d_model,
             nlayers=args.nlayers,
-            max_len=args.max_delay_frames
+            max_len=args.max_delay_frames + 3
         )
         self.argmax = args.argmax
         self.num_envs = num_envs
@@ -60,15 +60,15 @@ class Agent:
 
         if self.argmax:
             # actions = dist.probs.max(1, keepdim=True)[1]
-            actions = torch.argmax(dist[step][:, :-1], dim=1)
+            actions = torch.argmax(dist[...,step], dim=1)
         else:
             actions = dist.sample()
 
         actions = actions.squeeze()
 
-        if not preprocessed_obss.asked:
-            actions = torch.tensor([16])
-        else:
+        if torch.sum(preprocessed_obss.asked):
+        #     actions = torch.tensor([16])
+        # else:
             breakpoint()
         #     print((self.acmodel.step - 1) % self.acmodel.max_len, ':', actions)
 

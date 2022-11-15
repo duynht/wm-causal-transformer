@@ -9,8 +9,8 @@ def worker(conn, env):
         cmd, data = conn.recv()
         if cmd == "step":
             obs, reward, terminated, truncated, info = env.step(data)
-            if terminated or truncated:
-                obs, _ = env.reset()
+            # if terminated or truncated:
+            #     obs, _ = env.reset()
             conn.send((obs, reward, terminated, truncated, info))
         elif cmd == "reset":
             obs, _ = env.reset()
@@ -47,8 +47,8 @@ class ParallelEnv(gym.Env):
         for local, action in zip(self.locals, actions[1:]):
             local.send(("step", action))
         obs, reward, terminated, truncated, info = self.envs[0].step(actions[0])
-        if terminated or truncated:
-            obs, _ = self.envs[0].reset()
+        # if terminated or truncated:
+        #     obs, _ = self.envs[0].reset()
         results = zip(*[(obs, reward, terminated, truncated, info)] + [local.recv() for local in self.locals])
         return results
 

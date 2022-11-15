@@ -28,14 +28,17 @@ parser.add_argument("--argmax", action="store_true", default=False,
 #                     help="add a LSTM to the model")
 # parser.add_argument("--text", action="store_true", default=False,
 #                     help="add a GRU to the model")
-
-parser.add_argument("--grid-size", type=int, default=256,
+parser.add_argument("--tile-size", type=int, default=16,
+                    help="size of each cell in term of pixels")
+parser.add_argument("--grid-size", type=int, default=4,
                     help="square grid size")
-parser.add_argument("d_model", type=int, default=10,
+parser.add_argument("--d_model", type=int, default=10,
                     help="transformer embedding size")
-parser.add_argument("nlayers", type=int, default=2,
+parser.add_argument("--nlayers", type=int, default=2,
                     help="transformer MLP layers")
-parser.add_argument("max-delay-frames", type=int, default=5,
+parser.add_argument("--nhead", type=int, default=1,
+                    help="transformer attention heads")
+parser.add_argument("--max-delay-frames", type=int, default=5,
                     help="maximum number of delay frames per episode")
 
 if __name__ == "__main__":
@@ -58,6 +61,7 @@ if __name__ == "__main__":
         envs.append(DMTSGridEnv(
             grid_size=args.grid_size,
             max_delay=args.max_delay_frames,
+            tile_size=args.tile_size,
         ))
     env = ParallelEnv(envs)
     print("Environments loaded\n")
@@ -65,8 +69,7 @@ if __name__ == "__main__":
     # Load agent
 
     model_dir = utils.get_model_dir(args.model)
-    agent = utils.Agent(env.observation_space, env.action_space, model_dir,
-                        argmax=args.argmax, num_envs=args.procs)
+    agent = utils.Agent(env.observation_space, env.action_space, model_dir, args, num_envs=args.procs)
     print("Agent loaded\n")
 
     # Initialize logs
@@ -83,9 +86,11 @@ if __name__ == "__main__":
     log_episode_return = torch.zeros(args.procs, device=device)
     log_episode_num_frames = torch.zeros(args.procs, device=device)
 
+    step = 0
     while log_done_counter < args.episodes:
-        actions = agent.get_actions(obss)
-        obss, rewards, terminateds, truncateds, _ = env.step(actions)
+        actions = agent.get_actions(obss, step)
+        step += 1
+        obss, rewards, terminateds, truncateds, _ = env.step(actions, )
         dones = tuple(a | b for a, b in zip(terminateds, truncateds))
         agent.analyze_feedbacks(rewards, dones)
 

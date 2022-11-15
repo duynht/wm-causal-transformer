@@ -10,6 +10,7 @@ from utils import device
 from model import ACModel
 from visual_transformer import CausalVisionTransformer
 from working_memory_env.envs.grid_world import DMTSGridEnv
+import torchvision
 
 
 # Parse arguments
@@ -39,17 +40,20 @@ parser.add_argument("--tile-size", type=int, default=4,
                     help="size of each cell in term of pixels")
 parser.add_argument("--grid-size", type=int, default=4,
                     help="square grid size")
-parser.add_argument("d_model", type=int, default=10,
+parser.add_argument("--d_model", type=int, default=10,
                     help="transformer embedding size")
-parser.add_argument("nlayers", type=int, default=2,
+parser.add_argument("--nlayers", type=int, default=2,
                     help="transformer MLP layers")
-parser.add_argument("max-delay-frames", type=int, default=5,
+parser.add_argument("--nhead", type=int, default=1,
+                    help="transformer attention heads")
+parser.add_argument("--max-delay-frames", type=int, default=5,
                     help="maximum number of delay frames per episode")
 # parser.add_argument("--frames-per-proc", type=int, default=None,
 #                     help="number of frames per process before update (default: 5 for A2C and 128 for PPO)")
 parser.add_argument("--lr", type=float, default=0.001,
                     help="learning rate (default: 0.001)")
 parser.add_argument("--device", default="cpu")
+parser.add_argument("--suffix", type=str, default=None)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -60,9 +64,11 @@ if __name__ == "__main__":
 
     # Set run dir
 
-    date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    default_model_name = f"{args.grid_size}x{args.grid_size}_{args.tile_size}_seed{args.seed}_{date}"
-
+    # date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
+    # default_model_name = f"{args.grid_size}x{args.grid_size}_{args.tile_size}_seed{args.seed}_{date}"
+    default_model_name = f"{args.grid_size}x{args.grid_size}_tile{args.tile_size}_delay{args.max_delay_frames}_frames{args.frames}_dmodel{args.d_model}_nlayers{args.nlayers}_nhead{args.nhead}_seed{args.seed}"
+    if args.suffix:
+        default_model_name += f'_{args.suffix}'
     model_name = args.model or default_model_name
     model_dir = utils.get_model_dir(model_name)
 
@@ -123,7 +129,7 @@ if __name__ == "__main__":
         nhead=args.nhead,
         d_hid=args.d_model,
         nlayers=args.nlayers,
-        max_len=args.max_delay_frames+3
+        max_len=args.max_delay_frames+3,
     )
     acmodel.to(device)
     txt_logger.info("Model loaded\n")
@@ -163,6 +169,8 @@ if __name__ == "__main__":
         # exps, logs1 = algo.collect_experiences()
         # logs2 = algo.update_parameters(exps)
         # logs = {**logs1, **logs2}
+        # if num_frames / args.frames >= 0.5:
+        #     breakpoint()
         train_log = algo.update()
         update_end_time = time.time()
 
@@ -171,7 +179,10 @@ if __name__ == "__main__":
         tb_writer.add_scalar('Loss', train_log['loss'], update)
         # tb_writer.add_scalar('Accuracy', utils.synthesize(train_log('acc')).values(), update)
         tb_writer.add_scalar('Accuracy', train_log['acc'], update)
+        # tb_writer.add_graph(acmodel, train_log["final_input"])
+        # tb_writer.add_embedding(train_log["embed"], metadata=train_log["labels"], label_img=train_log["img"])
         num_frames += train_log["num_frames"]
+        txt_logger.info(f'Loss: {train_log["loss"]} Acc: {train_log["acc"]}')
 
         # Print logs
 
@@ -210,7 +221,8 @@ if __name__ == "__main__":
 
         if args.save_interval > 0 and update % args.save_interval == 0:
             status = {"num_frames": num_frames, "update": update,
-                      "model_state": acmodel.state_dict(), "optimizer_state": algo.optimizer.state_dict()}
+                    #   "model_state": acmodel.state_dict(), "optimizer_state": algo.optimizer.state_dict()}
+                      "model_state": acmodel.state_dict(), "optimizer_state": algo.optimizer.optimizer.state_dict()}
             if hasattr(preprocess_obss, "vocab"):
                 status["vocab"] = preprocess_obss.vocab.vocab
             utils.save_status(status, model_dir)
