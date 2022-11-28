@@ -128,7 +128,7 @@ class DMTSGridEnv(MiniGridEnv):
 
         return img
 
-    # TODO: The agent's view should be omnipotent
+    # NOTE: The agent's view should be omnipotent
     def gen_obs(self):
         """
         Generate the agent's view
@@ -246,25 +246,25 @@ class DMTSGrid(Grid):
 
             # Hash map lookup key for the cache
             key = (agent_dir, highlight, tile_size)
-            key = (obj.color * 10, obj.type * 10, obj.scale * 10) + key if obj else key
+            key = (obj.color, obj.type, obj.scale) + key if obj else key
 
-            if key in cls.tile_cache:
-                return cls.tile_cache[key]
+            # if key in cls.tile_cache:
+            #     return cls.tile_cache[key]
 
-            # img = np.zeros(
-            #     shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
-            # )
-            img = np.full(
-                shape=(tile_size * subdivs, tile_size * subdivs, 3),
-                fill_value=255,
-                dtype=np.uint8
+            img = np.zeros(
+                shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
             )
+            # img = np.full(
+            #     shape=(tile_size * subdivs, tile_size * subdivs, 3),
+            #     fill_value=255,
+            #     dtype=np.uint8
+            # )
 
             # Draw the grid lines (top and left edges)
-            # fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
-            # fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
-            fill_coords(img, point_in_rect(0, 0.031, 0, 1), (0, 0, 0))
-            fill_coords(img, point_in_rect(0, 1, 0, 0.031), (0, 0, 0))
+            fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
+            fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
+            # fill_coords(img, point_in_rect(0, 0.031, 0, 1), (0, 0, 0))
+            # fill_coords(img, point_in_rect(0, 1, 0, 0.031), (0, 0, 0))
 
             if obj is not None:
                 obj.render(img)

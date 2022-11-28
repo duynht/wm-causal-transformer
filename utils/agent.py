@@ -69,10 +69,10 @@ class Agent:
 
         actions = actions.squeeze()
 
-        # if torch.sum(preprocessed_obss.asked):
-        #     actions = torch.tensor([16])
+        if not torch.sum(preprocessed_obss.asked):
+            actions = torch.tensor([16])
         # else:
-            # breakpoint()
+        #     # breakpoint()
         #     print((self.acmodel.step - 1) % self.acmodel.max_len, ':', actions)
 
         return actions.cpu().numpy()
