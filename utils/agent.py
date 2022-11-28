@@ -35,9 +35,9 @@ class Agent:
         self.argmax = args.argmax
         self.num_envs = num_envs
 
-        if self.acmodel.recurrent:
+        # if self.acmodel.recurrent:
             # self.memories = torch.zeros(self.num_envs, self.acmodel.memory_size, device=device)
-            self.memories = torch.zeros(self.acmodel.max_len, self.num_envs, self.acmodel.memory_size, device=device)
+            # self.memories = torch.zeros(self.acmodel.max_len, self.num_envs, self.acmodel.memory_size, device=device)
 
         self.acmodel.load_state_dict(utils.get_model_state(model_dir))
         self.acmodel.to(device)
@@ -46,6 +46,7 @@ class Agent:
             self.preprocess_obss.vocab.load_vocab(utils.get_vocab(model_dir))
 
         self.attn_mask = generate_square_subsequent_mask(self.acmodel.max_len).to(device)
+        self.goal = torch.full([1, self.acmodel.max_len], self.acmodel.naction - 1).to(device)
 
     def get_actions(self, obss, step):
         # breakpoint()
@@ -53,10 +54,12 @@ class Agent:
 
         with torch.no_grad():
             
-            if self.acmodel.recurrent:
-                dist, self.memories, = self.acmodel(preprocessed_obss, self.memories, step, self.attn_mask, return_dist=(not self.argmax))
-            else:
-                dist, _ = self.acmodel(preprocessed_obss, attn_mask=self.attn_mask, return_dist=(~self.argmax))
+            # if self.acmodel.recurrent:
+            #     dist, self.memories, = self.acmodel(preprocessed_obss, self.memories, step, self.attn_mask, return_dist=(~self.argmax))
+            # else:
+            #     dist, _ = self.acmodel(preprocessed_obss, attn_mask=self.attn_mask, return_dist=(~self.argmax))
+
+            dist, embed = self.acmodel(preprocessed_obss.image, self.goal, step, self.attn_mask, return_embed=True, return_dist=False)
 
         if self.argmax:
             # actions = dist.probs.max(1, keepdim=True)[1]
@@ -66,10 +69,10 @@ class Agent:
 
         actions = actions.squeeze()
 
-        if torch.sum(preprocessed_obss.asked):
+        # if torch.sum(preprocessed_obss.asked):
         #     actions = torch.tensor([16])
         # else:
-            breakpoint()
+            # breakpoint()
         #     print((self.acmodel.step - 1) % self.acmodel.max_len, ':', actions)
 
         return actions.cpu().numpy()

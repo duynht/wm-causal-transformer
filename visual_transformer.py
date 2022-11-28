@@ -218,7 +218,7 @@ class CausalVisionTransformer(nn.Module):
         
         if attn_mask is not None:
             # embed = self.transf_encoder(embed, attn_mask)
-            embed = self.transf_decoder(self.tgt_emb(goal).squeeze(), embed, tgt_mask=attn_mask, memory_mask=attn_mask)
+            embed = self.transf_decoder(self.tgt_emb(goal), embed, tgt_mask=attn_mask, memory_mask=attn_mask)
         else:
             # embed = self.transf_encoder(embed)
             embed = self.transf_decoder(self.tgt_emb(goal).squeeze(), embed)

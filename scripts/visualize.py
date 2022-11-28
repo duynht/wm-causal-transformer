@@ -31,6 +31,8 @@ parser.add_argument("--grid-size", type=int, default=4,
                     help="square grid size")
 parser.add_argument("--d_model", type=int, default=10,
                     help="transformer embedding size")
+parser.add_argument("--nhead", type=int, default=1,
+                    help="transformer attention heads")
 parser.add_argument("--nlayers", type=int, default=2,
                     help="transformer MLP layers")
 parser.add_argument("--max-delay-frames", type=int, default=5,
@@ -86,7 +88,7 @@ for episode in range(args.episodes):
         action = agent.get_action(obs, env.step_count)
         obs, reward, terminated, truncated, _ = env.step(action)
         done = terminated | truncated
-        agent.analyze_feedback(reward, done)
+        # agent.analyze_feedback(reward, done)
 
         if done or env.window.closed:
             break
