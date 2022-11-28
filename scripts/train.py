@@ -9,6 +9,7 @@ import utils
 from utils import device
 from model import ACModel
 from visual_transformer import CausalVisionTransformer
+from compact_transformer import CCT
 from working_memory_env.envs.grid_world import DMTSGridEnv
 import torchvision
 
@@ -131,6 +132,20 @@ if __name__ == "__main__":
         nlayers=args.nlayers,
         max_len=args.max_delay_frames+3,
     )
+    
+    # acmodel = CCT(
+    #     img_width=args.tile_size * args.grid_size * (args.max_delay_frames + 3),
+    #     img_height=args.tile_size * args.grid_size,
+    #     num_layers=args.nlayers,
+    #     num_heads=args.nhead,
+    #     mlp_ratio=1,
+    #     embedding_dim=args.d_model,
+    #     kernel_size=3,
+    #     # stride=None,
+    #     # padding=None,    
+    #     num_classes=args.grid_size * args.grid_size + 1,
+    # )
+    
     acmodel.to(device)
     txt_logger.info("Model loaded\n")
     txt_logger.info("{}\n".format(acmodel))

@@ -44,10 +44,10 @@ def get_obss_preprocessor(obs_space):
 def preprocess_images(images, device=None):
     # Bug of Pytorch: very slow if not first converted to numpy array
     images = numpy.array(images)
-    images =  torch.tensor(images, device=device, dtype=torch.float)
+    images =  torch.tensor(images, device=device, dtype=torch.int64)
     images = images.permute(0, 3, 1, 2)
-    return VF.normalize(images, 255 * torch.tensor([0.485, 0.456, 0.406]), 255 * torch.tensor([0.229, 0.224, 0.225]))
-    # return VF.normalize(images, torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225]))
+    # return VF.normalize(images, 255 * torch.tensor([0.485, 0.456, 0.406]), 255 * torch.tensor([0.229, 0.224, 0.225]))
+    return VF.normalize(images / 255, torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225]))
 
 
 def preprocess_texts(texts, vocab, device=None):
