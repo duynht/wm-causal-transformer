@@ -82,7 +82,7 @@ class DMTSGridEnv(MiniGridEnv):
         # Rendering attributes
         self.render_mode = render_mode
         self.tile_size = tile_size
-        self.tile_factors = divisors(tile_size)[:-1]
+        # self.tile_factors = divisors(tile_size)[:-1]
 
         self.agent_pos = None
         self.agent_dir = None
@@ -90,13 +90,13 @@ class DMTSGridEnv(MiniGridEnv):
 
     def _gen_obj(self, obj_type, is_goal=False):
         if obj_type == "circle":
-            obj = Circle(self._rand_color(), self._rand_elem(self.tile_factors), is_goal)
+            obj = Circle(self._rand_color(), self._rand_float(0, 0.4), is_goal)
         
         elif obj_type == "square":
-            obj = Square(self._rand_color(), self._rand_elem(self.tile_factors), is_goal)
+            obj = Square(self._rand_color(), self._rand_float(0, 0.4), is_goal)
 
         elif obj_type == "triangle":
-            obj = Triangle(self._rand_color(), self._rand_elem(self.tile_factors), is_goal)
+            obj = Triangle(self._rand_color(), self._rand_float(0, 0.4), is_goal)
 
         else:
             raise ValueError(
@@ -248,8 +248,8 @@ class DMTSGrid(Grid):
             key = (agent_dir, highlight, tile_size)
             key = (obj.color, obj.type, obj.scale) + key if obj else key
 
-            # if key in cls.tile_cache:
-            #     return cls.tile_cache[key]
+            if key in cls.tile_cache:
+                return cls.tile_cache[key]
 
             img = np.zeros(
                 shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
@@ -340,8 +340,17 @@ class Square(WorldObj):
         return True
 
     def render(self, img):
-        fill_coords(img, point_in_rect(0.12, 0.88, 0.12, 0.88), COLORS[self.color])
-        downsample(img, self.scale)
+        fill_coords(
+            img, 
+            point_in_rect(
+                0.12 * (1 - self.scale), 
+                0.88 * (1 - self.scale), 
+                0.12 * (1 - self.scale), 
+                0.88 * (1 - self.scale)
+            ), 
+            COLORS[self.color]
+        )
+        # downsample(img, self.scale)
 
 class Triangle(WorldObj):
     def __init__(self, color, scale=1., is_goal=False):
@@ -356,14 +365,14 @@ class Triangle(WorldObj):
         fill_coords(
             img,
             point_in_triangle(
-                (0.12, 0.19),
-                (0.87, 0.50),
-                (0.12, 0.81),
+                (0.12 * (1 + self.scale), 0.12 * (1 + self.scale)),
+                (0.12 * (1 + self.scale) + 0.88*(1 - self.scale)/2, 0.78 * (1 - self.scale)),
+                (0.88 * (1 - self.scale), 0.12 * (1 - self.scale)),
             ),
             COLORS[self.color],
         )
         
-        downsample(img, self.scale)
+        # downsample(img, self.scale)
 
 class Circle(WorldObj):
     def __init__(self, color, scale=1., is_goal=False):
@@ -375,5 +384,5 @@ class Circle(WorldObj):
         return True
 
     def render(self, img):
-        fill_coords(img, point_in_circle(0.5, 0.5, 0.31), COLORS[self.color])
-        downsample(img, self.scale)
+        fill_coords(img, point_in_circle(0.5, 0.5, 0.31*(1 - self.scale)), COLORS[self.color])
+        # downsample(img, self.scale)
