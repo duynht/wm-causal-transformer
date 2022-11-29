@@ -2,9 +2,7 @@ import torch
 
 import utils
 from .other import device
-from model import ACModel
-from visual_transformer import CausalVisionTransformer
-from gpt import DecisionTransformer
+from visual_causal_transformer import VisualCausalTransformer
 from torch import Tensor
 
 def generate_square_subsequent_mask(sz: int) -> Tensor:
@@ -20,25 +18,12 @@ class Agent:
 
     def __init__(self, obs_space, action_space, model_dir, args, num_envs=1):
         obs_space, self.preprocess_obss = utils.get_obss_preprocessor(obs_space)
-        # self.acmodel = ACModel(obs_space, action_space, use_memory=use_memory, use_text=use_text)
-        # self.acmodel = CausalVisionTransformer(
-        #     in_channels=obs_space["image"][2],
-        #     out_channels=32,
-        #     kernel_size=3,
-        #     obs_space=obs_space,
-        #     action_space=action_space,
-        #     d_model=args.d_model,
-        #     nhead=args.nhead,
-        #     d_hid=args.d_model,
-        #     nlayers=args.nlayers,
-        #     max_len=args.max_delay_frames + 3
-        # )
-
-        self.model = DecisionTransformer(
+        
+        self.model = VisualCausalTransformer(
             state_dim=2,
             act_dim=action_space.n,
             n_blocks=args.nlayers,
-            h_dim=args.d_model,
+            d_model=args.d_model,
             n_heads=args.nhead,
             context_len=args.max_delay_frames+3,
             drop_p=0.5,
@@ -54,9 +39,6 @@ class Agent:
         self.model.eval()
         if hasattr(self.preprocess_obss, "vocab"):
             self.preprocess_obss.vocab.load_vocab(utils.get_vocab(model_dir))
-
-        # self.attn_mask = generate_square_subsequent_mask(self.acmodel.max_len).to(device)
-        # self.goal = torch.full([1, self.acmodel.max_len], self.acmodel.naction - 1).to(device)
         
         self.timesteps = torch.arange(self.max_frames).expand(self.num_envs, self.max_frames).to(device)
         
@@ -91,7 +73,7 @@ class Agent:
         return self.get_actions([obs], step)
 
     def analyze_feedbacks(self, rewards, dones):
-        masks = 1 - torch.tensor(dones, dtype=torch.float, device=device).unsqueeze(1)
+        masks = 1 - torch.tensor(dones, dtype=torch.float).unsqueeze(1)
         acc = torch.sum(torch.tensor(rewards)) / torch.sum(torch.arange(0, self.max_frames) * masks)
         return acc.cpu().numpy()
         # if self.acmodel.recurrent:

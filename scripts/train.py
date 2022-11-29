@@ -1,18 +1,13 @@
 import argparse
 import time
-import datetime
 import torch_ac
 import tensorboardX
 import sys
 
 import utils
 from utils import device
-# from model import model
-from visual_transformer import CausalVisionTransformer
-from gpt import DecisionTransformer
-# from compact_transformer import CCT
+from visual_causal_transformer import VisualCausalTransformer
 from working_memory_env.envs.grid_world import DMTSGridEnv
-import torchvision
 
 
 # Parse arguments
@@ -118,50 +113,22 @@ if __name__ == "__main__":
 
     # Load model
 
-    model = DecisionTransformer(
+    model = VisualCausalTransformer(
         state_dim=2,
         act_dim=envs[0].action_space.n,
         n_blocks=args.nlayers,
-        h_dim=args.d_model,
+        d_model=args.d_model,
         n_heads=args.nhead,
         context_len=args.max_delay_frames+3,
         drop_p=0.5,
         obs_space=obs_space,
     )
-
-    # model = CausalVisionTransformer(
-    #     in_channels=obs_space["image"][2],
-    #     out_channels=32,
-    #     kernel_size=3,
-    #     obs_space=obs_space,
-    #     action_space=envs[0].action_space,
-    #     d_model=args.d_model,
-    #     nhead=args.nhead,
-    #     d_hid=args.d_model,
-    #     nlayers=args.nlayers,
-    #     max_len=args.max_delay_frames+3,
-    # )
-    
-    # model = CCT(
-    #     img_width=args.tile_size * args.grid_size * (args.max_delay_frames + 3),
-    #     img_height=args.tile_size * args.grid_size,
-    #     num_layers=args.nlayers,
-    #     num_heads=args.nhead,
-    #     mlp_ratio=1,
-    #     embedding_dim=args.d_model,
-    #     kernel_size=3,
-    #     # stride=None,
-    #     # padding=None,    
-    #     num_classes=args.grid_size * args.grid_size + 1,
-    # )
     
     model.to(device)
     txt_logger.info("Model loaded\n")
     txt_logger.info("{}\n".format(model))
 
     # Load algo
-
-    # if args.algo == 'dmts':
     algo = torch_ac.DMTSAlgo(
         envs, 
         model, 

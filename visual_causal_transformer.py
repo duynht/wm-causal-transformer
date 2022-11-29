@@ -6,7 +6,7 @@ import torch.nn.functional as F
 class MaskedCausalAttention(nn.Module):
     def __init__(
         self,
-        h_dim,
+        d_model,
         max_T,
         n_heads,
         drop_p
@@ -16,11 +16,11 @@ class MaskedCausalAttention(nn.Module):
         self.n_heads = n_heads
         self.max_T = max_T
         
-        self.q_net = nn.Linear(h_dim, h_dim)
-        self.k_net = nn.Linear(h_dim, h_dim)
-        self.v_net = nn.Linear(h_dim, h_dim)
+        self.q_net = nn.Linear(d_model, d_model)
+        self.k_net = nn.Linear(d_model, d_model)
+        self.v_net = nn.Linear(d_model, d_model)
         
-        self.proj_net = nn.Linear(h_dim, h_dim)
+        self.proj_net = nn.Linear(d_model, d_model)
         
         self.attn_drop = nn.Dropout(drop_p)
         self.proj_drop = nn.Dropout(drop_p)
@@ -31,7 +31,7 @@ class MaskedCausalAttention(nn.Module):
         self.register_buffer('mask', mask)
         
     def forward(self, x):
-        B, T, C = x.shape # batch_size, seq_len, h_dim * n_heads
+        B, T, C = x.shape # batch_size, seq_len, d_model * n_heads
         
         N, D = self.n_heads, C // self.n_heads # n_heads, attn_dim
         
@@ -60,23 +60,23 @@ class MaskedCausalAttention(nn.Module):
 class Block(nn.Module):
     def __init__(
         self,
-        h_dim,
+        d_model,
         max_T,
         n_heads,
         drop_p
     ) -> None:
         super().__init__()
         
-        self.attention = MaskedCausalAttention(h_dim, max_T, n_heads, drop_p)
+        self.attention = MaskedCausalAttention(d_model, max_T, n_heads, drop_p)
         self.mlp = nn.Sequential(
-            nn.Linear(h_dim, 4 * h_dim),
+            nn.Linear(d_model, 4 * d_model),
             nn.GELU(),
-            nn.Linear(4 * h_dim, h_dim),
+            nn.Linear(4 * d_model, d_model),
             nn.Dropout(drop_p)
         )
         
-        self.ln1 = nn.LayerNorm(h_dim)
-        self.ln2 = nn.LayerNorm(h_dim)
+        self.ln1 = nn.LayerNorm(d_model)
+        self.ln2 = nn.LayerNorm(d_model)
         
     def forward(self, x):
         x = x + self.attention(x)
@@ -86,38 +86,38 @@ class Block(nn.Module):
         
         return x
     
-class DecisionTransformer(nn.Module):
+class VisualCausalTransformer(nn.Module):
     def __init__(
         self,
         state_dim,
         act_dim,
         n_blocks,
-        h_dim,
+        d_model,
         context_len,
         n_heads,
         drop_p,
         obs_space,
         max_timestep=4096,
-        out_channels: int = 32,
-        kernel_size: int = 3,
-        n_conv_layers: int = 4,
-        pooling_kernel_size = 3,
-        pooling_stride = 2,
-        pooling_padding = 1
+        out_channels=32,
+        kernel_size=3,
+        n_conv_layers=4,
+        pooling_kernel_size=3,
+        pooling_stride=2,
+        pooling_padding=1
     ) -> None:
         super().__init__()
         
         self.state_dim = state_dim
         self.act_dim = act_dim
-        self.h_dim = h_dim
+        self.d_model = d_model
         
         input_seq_len = 3 * context_len
-        blocks = [Block(h_dim, input_seq_len, n_heads, drop_p) for _ in range(n_blocks)]
+        blocks = [Block(d_model, input_seq_len, n_heads, drop_p) for _ in range(n_blocks)]
         self.transformer = nn.Sequential(*blocks)
         
         # project to embedding
-        self.embed_ln = nn.LayerNorm(h_dim)
-        self.embed_timestep = nn.Embedding(max_timestep, h_dim)
+        self.embed_ln = nn.LayerNorm(d_model)
+        self.embed_timestep = nn.Embedding(max_timestep, d_model)
 
         
         n, m, in_channels = obs_space['image']
@@ -151,18 +151,18 @@ class DecisionTransformer(nn.Module):
                 for i in range(n_conv_layers)
             ],
             nn.Flatten(),
-            nn.Linear(flatten_dim, h_dim),
+            nn.Linear(flatten_dim, d_model),
         )
         
-        self.embed_state = nn.Embedding(2, h_dim)
-        self.embed_action = nn.Embedding(act_dim, h_dim)
+        self.embed_state = nn.Embedding(2, d_model)
+        self.embed_action = nn.Embedding(act_dim, d_model)
         
         use_action_tanh = True
         
         # prediction
-        self.predict_state = nn.Linear(h_dim, state_dim)
+        self.predict_state = nn.Linear(d_model, state_dim)
         self.predict_action = nn.Sequential(
-            *([nn.Linear(h_dim, act_dim)] +
+            *([nn.Linear(d_model, act_dim)] +
                 ([nn.Tanh()] if use_action_tanh else [])
             )
         )
@@ -185,9 +185,6 @@ class DecisionTransformer(nn.Module):
         
         frame_embeddings = self.embed_frame(frame)
         
-        if self.embed_frame[0][0].weight.grad is not None:
-            breakpoint()
-        
         if memory is None:
             memory = frame_embeddings.unsqueeze(1)
         else:
@@ -200,24 +197,32 @@ class DecisionTransformer(nn.Module):
             memory,
             state_embeddings,
             action_embeddings,
-        ], dim=1).permute(0, 2, 1, 3).reshape(B, 3 * T, self.h_dim)
+        ], dim=1).permute(0, 2, 1, 3).reshape(B, 3 * T, self.d_model)
         
         h = self.embed_ln(h)
         
         h = self.transformer(h)
         
-        h = h.reshape(B, T, 3, self.h_dim).permute(0, 2, 1, 3)
-        # return_preds = self.predict_rtg(h[:, 2])
+        h = h.reshape(B, T, 3, self.d_model).permute(0, 2, 1, 3)
+        
         state_logits = self.predict_state(h[:, 1])
         action_logits = self.predict_action(h[:, 2])
         
         state_preds = torch.argmax(state_logits, dim=-1).unsqueeze(-1).expand(action_logits.shape)
         action_logits = action_logits * state_preds +\
-                        F.one_hot(torch.full([*action_logits.shape[:2]], self.act_dim - 1)).to(self.device) * (1 - state_preds)
+                        F.one_hot(torch.full(action_logits.shape[:2], self.act_dim - 1)).to(self.device) * (1 - state_preds)
         
-        return (
-            action_logits, 
-            state_logits, 
-            memory,
-            # return_preds,
-        )
+        if return_embed:
+            return (
+                action_logits, 
+                h[:, 2],
+                state_logits, 
+                memory,
+            )
+        
+        else:
+            return (
+                action_logits, 
+                state_logits, 
+                memory,
+            )

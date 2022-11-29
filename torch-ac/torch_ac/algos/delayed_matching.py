@@ -108,7 +108,7 @@ class DMTSAlgo(ABC):
         self.obss = [None] * (shape[0])
         
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr, eps=adam_eps)
-        self.act_loss = CrossEntropyLoss()
+        self.act_loss = CrossEntropyLoss(ignore_index=self.model.act_dim - 1)
         self.state_loss = CrossEntropyLoss()
         
         
@@ -137,9 +137,9 @@ class DMTSAlgo(ABC):
             self.obs = obs
             
         actions = torch.argmax(act_logits, dim=-1)
-        pred_states = torch.argmax(state_logits, dim=-1)
-        ic(actions[-1])
-        ic(pred_states)
+        # pred_states = torch.argmax(state_logits, dim=-1)
+        # ic(actions[-1])
+        # ic(pred_states)
         
         acc = torch.sum(actions == goals[:, 1:]).item() / (self.num_procs * self.num_frames_per_proc)
         self.optimizer.zero_grad()
