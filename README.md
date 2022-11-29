@@ -87,7 +87,7 @@ Whether this is due to a model bug, a gif rendering (aliasing) bug, or due to re
 
 I notice that the larger the pause period, the more action frames (the transparent square) are lost. This is kind of make sense since each episode only have one action frame, which make them tend to be ignored by animation interpolation.
 
-You can try running the visualization on you machine and let me know of the result.
+You can try running the visualization on you machine and let me know of the result. The models can be download from [this link](https://drive.google.com/drive/folders/1clWdMTT0Ye1jhBv8_Z9L4uunpeXwjJXd?usp=share_link).
 
 ### Different sizes of transformers
 **4x4_tile32_delay5_frames1000000_dmodel10_nlayers2_nhead1_seed0**
