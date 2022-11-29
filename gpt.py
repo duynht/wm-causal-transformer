@@ -178,7 +178,7 @@ class DecisionTransformer(nn.Module):
         timesteps,
         states,
         actions, 
-        # returns_to_go,
+        return_embed=False,
     ):
         B, T, *_ = states.shape
         time_embeddings = self.embed_timestep(timesteps)

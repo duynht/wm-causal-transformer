@@ -53,7 +53,7 @@ class NoamOpt:
         
 
 
-class DelayedMatchingAlgo(ABC):
+class DMTSAlgo(ABC):
     """The base class for RL algorithms."""
 
     def __init__(

@@ -17,8 +17,8 @@ from minigrid.utils.rendering import (
     point_in_circle,
     point_in_rect,
     point_in_triangle,
-    highlight_img
-    # downsample,
+    highlight_img,
+    downsample,
 )
 
 TILE_PIXELS = 32
