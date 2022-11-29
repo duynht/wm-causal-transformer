@@ -1,194 +1,140 @@
-# RL Starter Files
+# [WIP] Delayed Match-to-Sample
 
-RL starter files in order to immediatly train, visualize and evaluate an agent **without writing any line of code**.
+> Write the code for training a causal transformer network (with depth of two and dimension of 10) to learn the delayed match-to-sample task with cross-entropy loss. You can use mini-grid environment (https://github.com/maximecb/gym-minigrid) to
+instantiate this task. Each episode starts by a view of the empty grid. Then a random image of a shape (square, triangle, circle) is shown in one of the squares (cue). The color and size are randomized. After a random number of delay frames (maximum 5 frames),
+images of two shapes are shown in two random grid-locations (tests). The shape in one of the “test” images matches that in the “cue” image. The correct action is to select the grid-location containing the matching test image.
 
-<p align="center">
-    <img width="300" src="README-rsrc/visualize-keycorridor.gif">
-</p>
+To accomplish this task, I first implement a minigrid environment named [`DMTSGridEnv`](wm-causal-transformer/working_memory_env/envs/grid_world.py). The satisfying the requirements above, with the number of frames for each episode being `max_delay_frames + 3`, i.e., the first frame is the empty grid, the second frame is the cue, and the final frame is the test frame.
 
-These files are suited for [`gym-minigrid`](https://github.com/maximecb/gym-minigrid) environments and [`torch-ac`](https://github.com/lcswillems/torch-ac) RL algorithms. They are easy to adapt to other environments and RL algorithms.
+Then, I design a model that predict both the current `state` of the sequence: is it time to actuate and match-to-sample, and the action to be taken. The model, called [`VisualCausalTransformer`](visual_causal_transformer.py), is composed of a convolutional encoder, a decoder-only transformer, and linear decoder layers. At each timestep, the model take in a new RGB `frame` from the environment, a `memory` consists of convolutional embeddings from previous frames, the sequence of `states` so far, and the sequence of `goals`, or actions, expected by the environments so far. 
 
-## Features
+The predicted `states` is used to mask the action logits of the model, making explicit relationship between correctly predicting the state and the performance. The training loss is the sum of the multi-dimensional `CrossEntropyLoss` over the sequence of states and the multi-dimensional `CrossEntropyLoss` over the sequence of actions.
 
-- **Script to train**, including:
-  - Log in txt, CSV and Tensorboard
-  - Save model
-  - Stop and restart training
-  - Use A2C or PPO algorithms
-- **Script to visualize**, including:
-  - Act by sampling or argmax
-  - Save as Gif
-- **Script to evaluate**, including:
-  - Act by sampling or argmax
-  - List the worst performed episodes
+The driver and agent codes are adapted from `torch-ac`. `ParallelEnv` is modified so that each environment process is not restarted continuously by repeat the final states instead to facilitate batch training.
 
-## Installation
+## Usage
+First, install a conda environment with `python=3.8` and  `pytorch=1.12.1` with appropriate `torchvision` and `cudatoolkit` versions.
 
-1. Clone this repository.
+Then, install requirements with `pip install -r requirements.txt`
 
-2. Install `gym-minigrid` environments and `torch-ac` RL algorithms:
 
+To train a model, use
 ```
-pip3 install -r requirements.txt
-```
-
-**Note:** If you want to modify `torch-ac` algorithms, you will need to rather install a cloned version, i.e.:
-```
-git clone https://github.com/lcswillems/torch-ac.git
-cd torch-ac
-pip3 install -e .
+python -m scripts.train \
+--save-interval 10 \
+--grid-size 4 \
+--tile-size 32 \
+--max-delay-frames 10 \
+--procs 64 \
+--frames 1000000 \
+--d_model 10 \
+--nlayers 2 \
+--nhead 1 \
+--device cuda:0 \
+--seed 0
 ```
 
-## Example of use
+in which,
+  - `--save-interval`: number of updates between two saves (default: 10, 0 means no saving)
+  - `--procs`: number of processes (training batch size) (default: 16)
+  - `--frames`: number of frames of training (default: 1e7)
+  - `--tile-size`: size of each cell in term of pixels
+  - `--grid-size`: square grid size
+  - `--d_model`: transformer embedding size
+  - `--nlayers`: number of transformer blocks
+  -`--nhead`: transformer attention heads
+  - `--max-delay-frames`: maximum number of delay frames per episode
+  - `--lr`: learning rate (default: 0.001)
+  - `--device`: cuda or cpu device
+  - `--seed`: random seed (default: 1)
 
-Train, visualize and evaluate an agent on the `MiniGrid-DoorKey-5x5-v0` environment:
+  The training results can be observered by pointing Tensorboard to folder `storage`.
 
-<p align="center"><img src="README-rsrc/doorkey.png"></p>
-
-1. Train the agent on the `MiniGrid-DoorKey-5x5-v0` environment with PPO algorithm:
-
+To visualize, use
 ```
-python3 -m scripts.train --algo ppo --env MiniGrid-DoorKey-5x5-v0 --model DoorKey --save-interval 10 --frames 80000
-```
-
-<p align="center"><img src="README-rsrc/train-terminal-logs.png"></p>
-
-2. Visualize agent's behavior:
-
-```
-python3 -m scripts.visualize --env MiniGrid-DoorKey-5x5-v0 --model DoorKey
-```
-
-<p align="center"><img src="README-rsrc/visualize-doorkey.gif"></p>
-
-3. Evaluate agent's performance:
-
-```
-python3 -m scripts.evaluate --env MiniGrid-DoorKey-5x5-v0 --model DoorKey
-```
-
-<p align="center"><img src="README-rsrc/evaluate-terminal-logs.png"></p>
-
-**Note:** More details on the commands are given below.
-
-## Other examples
-
-### Handle textual instructions
-
-In the `GoToDoor` environment, the agent receives an image along with a textual instruction. To handle the latter, add `--text` to the command:
-
-```
-python3 -m scripts.train --algo ppo --env MiniGrid-GoToDoor-5x5-v0 --model GoToDoor --text --save-interval 10 --frames 1000000
+python -m scripts.visualize \
+--grid-size 4 \
+--tile-size 32 \
+--model 4x4_tile32_delay30_frames1000000_dmodel10_nlayers2_nhead1_seed0 \
+--max-delay-frames 30 \
+--d_model 10 \
+--nlayers 2 \
+--nhead 1 \
+--episode 100 \
+--seed 99 \
+--gif \
+--pause 0.8
 ```
 
-<p align="center"><img src="README-rsrc/visualize-gotodoor.gif"></p>
+in which, 
+- `--grid-size`: square grid size
+- `--tile-size`: size of each cell in term of pixels
+- `--model`: name of the trained model (REQUIRED)
+- `--max-delay-frames`: maximum number of delay frames per episode
+- `--d_model`: transformer embedding size
+- `--nlayers`: transformer blocks
+- `--nhead`: transformer attention heads
+- `--episodes`: number of episodes to visualize
+- `--seed`: random seed (default: 0)
+- `--gif`: store output as <model>.gif
+- `--pause`: pause duration between two consequent actions of the agent (default: 0.1)
 
-### Add memory
 
-In the `RedBlueDoors` environment, the agent has to open the red door then the blue one. To solve it efficiently, when it opens the red door, it has to remember it. To add memory to the agent, add `--recurrence X` to the command:
+## Results
+**Note:** Inference results showing on the gif is not showing a matching performance. 
 
-```
-python3 -m scripts.train --algo ppo --env MiniGrid-RedBlueDoors-6x6-v0 --model RedBlueDoors --recurrence 4 --save-interval 10 --frames 1000000
-```
+Whether this is due to a model bug, a gif rendering (aliasing) bug, or due to rendering hardware (Intel i7 CPU on Surface Pro 4) need further investigation.
 
-<p align="center"><img src="README-rsrc/visualize-redbluedoors.gif"></p>
+I notice that the larger the pause period, the more action frames (the transparent square) are lost. This is kind of make sense since each episode only have one action frame, which make them tend to be ignored by animation interpolation.
 
-## Files
+You can try running the visualization on you machine and let me know of the result.
 
-This package contains:
-- scripts to:
-  - train an agent \
-  in `script/train.py` ([more details](#scripts-train))
-  - visualize agent's behavior \
-  in `script/visualize.py` ([more details](#scripts-visualize))
-  - evaluate agent's performances \
-  in `script/evaluate.py` ([more details](#scripts-evaluate))
-- a default agent's model \
-in `model.py` ([more details](#model))
-- utilitarian classes and functions used by the scripts \
-in `utils`
+### Different sizes of transformers
+**4x4_tile32_delay5_frames1000000_dmodel10_nlayers2_nhead1_seed0**
 
-These files are suited for [`gym-minigrid`](https://github.com/maximecb/gym-minigrid) environments and [`torch-ac`](https://github.com/lcswillems/torch-ac) RL algorithms. They are easy to adapt to other environments and RL algorithms by modifying:
-- `model.py`
-- `utils/format.py`
+![](README-rsrc/4x4_tile32_delay5_frames1000000_dmodel10_nlayers2_nhead1_seed0.gif)
 
-<h2 id="scripts-train">scripts/train.py</h2>
+**4x4_tile32_delay5_frames1000000_dmodel20_nlayers3_nhead1_seed0**
 
-An example of use:
+![](README-rsrc/4x4_tile32_delay5_frames1000000_dmodel20_nlayers3_nhead1_seed0.gif)
 
-```bash
-python3 -m scripts.train --algo ppo --env MiniGrid-DoorKey-5x5-v0 --model DoorKey --save-interval 10 --frames 80000
-```
+**4x4_tile32_delay5_frames1000000_dmodel30_nlayers4_nhead1_seed0**
 
-The script loads the model in `storage/DoorKey` or creates it if it doesn't exist, then trains it with the PPO algorithm on the MiniGrid DoorKey environment, and saves it every 10 updates in `storage/DoorKey`. It stops after 80 000 frames.
+![](README-rsrc/4x4_tile32_delay5_frames1000000_dmodel30_nlayers4_nhead1_seed0.gif)
 
-**Note:** You can define a different storage location in the environment variable `PROJECT_STORAGE`.
+![](README-rsrc/q2_legend.png)
+![](README-rsrc/q2_acc.png)
+![](README-rsrc/q2_loss.png)
 
-More generally, the script has 2 required arguments:
-- `--algo ALGO`: name of the RL algorithm used to train
-- `--env ENV`: name of the environment to train on
+From the accuracy and loss charts, it can easily be seen that, in general, larger transformers can either converge faster or achieve comparable performance faster than smaller ones.
 
-and a bunch of optional arguments among which:
-- `--recurrence N`: gradient will be backpropagated over N timesteps. By default, N = 1. If N > 1, a LSTM is added to the model to have memory.
-- `--text`: a GRU is added to the model to handle text input.
-- ... (see more using `--help`)
+### Different maximum delays
+**4x4_tile32_delay10_frames1000000_dmodel10_nlayers2_nhead1_seed0**
 
-During training, logs are printed in your terminal (and saved in text and CSV format):
+![](README-rsrc/4x4_tile32_delay10_frames1000000_dmodel10_nlayers2_nhead1_seed0.gif)
 
-<p align="center"><img src="README-rsrc/train-terminal-logs.png"></p>
+**4x4_tile32_delay20_frames1000000_dmodel10_nlayers2_nhead1_seed0**
 
-**Note:** `U` gives the update number, `F` the total number of frames, `FPS` the number of frames per second, `D` the total duration, `rR:μσmM` the mean, std, min and max reshaped return per episode, `F:μσmM` the mean, std, min and max number of frames per episode, `H` the entropy, `V` the value, `pL` the policy loss, `vL` the value loss and `∇` the gradient norm.
+![](README-rsrc/4x4_tile32_delay20_frames1000000_dmodel10_nlayers2_nhead1_seed0.gif)
 
-During training, logs are also plotted in Tensorboard:
+**4x4_tile32_delay30_frames1000000_dmodel10_nlayers2_nhead1_seed0**
 
-<p><img src="README-rsrc/train-tensorboard.png"></p>
+![](README-rsrc/4x4_tile32_delay30_frames1000000_dmodel10_nlayers2_nhead1_seed0.gif)
 
-<h2 id="scripts-visualize">scripts/visualize.py</h2>
+![](README-rsrc/q3_legend.png)
+![](README-rsrc/q3_acc.png)
+![](README-rsrc/q3_loss.png)
 
-An example of use:
+According to the charts, it seems the longer the delay, the easier for the model to learn the task. 
 
-```
-python3 -m scripts.visualize --env MiniGrid-DoorKey-5x5-v0 --model DoorKey
-```
+Notice that models with longer maximum delays are trained with smaller number of updates as runs are defined in terms of maximum frames feed in the model.
 
-<p align="center"><img src="README-rsrc/visualize-doorkey.gif"></p>
 
-In this use case, the script displays how the model in `storage/DoorKey` behaves on the MiniGrid DoorKey environment.
+  
 
-More generally, the script has 2 required arguments:
-- `--env ENV`: name of the environment to act on.
-- `--model MODEL`: name of the trained model.
 
-and a bunch of optional arguments among which:
-- `--argmax`: select the action with highest probability
-- ... (see more using `--help`)
 
-<h2 id="scripts-evaluate">scripts/evaluate.py</h2>
 
-An example of use:
 
-```
-python3 -m scripts.evaluate --env MiniGrid-DoorKey-5x5-v0 --model DoorKey
-```
 
-<p align="center"><img src="README-rsrc/evaluate-terminal-logs.png"></p>
 
-In this use case, the script prints in the terminal the performance among 100 episodes of the model in `storage/DoorKey`.
-
-More generally, the script has 2 required arguments:
-- `--env ENV`: name of the environment to act on.
-- `--model MODEL`: name of the trained model.
-
-and a bunch of optional arguments among which:
-- `--episodes N`: number of episodes of evaluation. By default, N = 100.
-- ... (see more using `--help`)
-
-<h2 id="model">model.py</h2>
-
-The default model is discribed by the following schema:
-
-<p align="center"><img src="README-rsrc/model.png"></p>
-
-By default, the memory part (in red) and the langage part (in blue) are disabled. They can be enabled by setting to `True` the `use_memory` and `use_text` parameters of the model constructor.
-
-This model can be easily adapted to your needs.
