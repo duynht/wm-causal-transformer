@@ -17,11 +17,9 @@ from minigrid.utils.rendering import (
     point_in_circle,
     point_in_rect,
     point_in_triangle,
-    downsample,
     highlight_img
+    # downsample,
 )
-
-from sympy import divisors
 
 TILE_PIXELS = 32
 
@@ -140,6 +138,7 @@ class DMTSGridEnv(MiniGridEnv):
         # Observations are dictionaries containing:
         # - an image (omnipotent view of the environment)
         # - task trigger
+        # - current goal position
 
         obs = {"image": image, "asked": self.asked, "goal": self.goal_pos}
 
@@ -254,6 +253,8 @@ class DMTSGrid(Grid):
             img = np.zeros(
                 shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
             )
+            
+            # Black grid
             # img = np.full(
             #     shape=(tile_size * subdivs, tile_size * subdivs, 3),
             #     fill_value=255,
@@ -263,6 +264,8 @@ class DMTSGrid(Grid):
             # Draw the grid lines (top and left edges)
             fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
             fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
+            
+            # White tiles
             # fill_coords(img, point_in_rect(0, 0.031, 0, 1), (0, 0, 0))
             # fill_coords(img, point_in_rect(0, 1, 0, 0.031), (0, 0, 0))
 
@@ -371,7 +374,6 @@ class Triangle(WorldObj):
             ),
             COLORS[self.color],
         )
-        
         # downsample(img, self.scale)
 
 class Circle(WorldObj):

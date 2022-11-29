@@ -34,56 +34,65 @@ class Agent:
         )
         self.argmax = args.argmax
         self.num_envs = num_envs
-
-        # if self.acmodel.recurrent:
-            # self.memories = torch.zeros(self.num_envs, self.acmodel.memory_size, device=device)
-            # self.memories = torch.zeros(self.acmodel.max_len, self.num_envs, self.acmodel.memory_size, device=device)
-
+        self.max_frames = args.max_delay_frames + 3
         self.acmodel.load_state_dict(utils.get_model_state(model_dir))
         self.acmodel.to(device)
         self.acmodel.eval()
         if hasattr(self.preprocess_obss, "vocab"):
             self.preprocess_obss.vocab.load_vocab(utils.get_vocab(model_dir))
 
-        self.attn_mask = generate_square_subsequent_mask(self.acmodel.max_len).to(device)
-        self.goal = torch.full([1, self.acmodel.max_len], self.acmodel.naction - 1).to(device)
+        # self.attn_mask = generate_square_subsequent_mask(self.acmodel.max_len).to(device)
+        # self.goal = torch.full([1, self.acmodel.max_len], self.acmodel.naction - 1).to(device)
+        
+        self.timesteps = torch.arange(self.max_frames).expand(self.num_envs, self.max_frames).to(self.device)
+        
+        self.reset_()
 
+    def reset_(self):
+        self.memory = None
+        self.states = torch.full([self.num_envs, 1], 0).long().to(self.device)
+        self.goals = torch.full([self.num_envs, 1], self.model.act_dim - 1).to(self.device)
+        
     def get_actions(self, obss, step):
-        # breakpoint()
         preprocessed_obss = self.preprocess_obss(obss, device=device)
 
         with torch.no_grad():
+            if self.get_embed:
+                # logits, embed, _, _ = self.acmodel(preprocessed_obss.image, self.goal, step, self.attn_mask, return_embed=True, return_dist=False)
+                act_logits, state_logits, self.memory, embed = self.model(preprocessed_obss.image, self.memory, self.timesteps[:, :step+1], self.states, self.goals, return_embed=True)
+            else: 
+                act_logits, state_logits, self.memory = self.model(preprocessed_obss.image, self.memory, self.timesteps[:, :step+1], self.states, self.goals)
+            self.states = torch.cat([self.states, preprocessed_obss.asked.long().unsqueeze(1)], dim=1)
+            self.goals = torch.cat([self.goals, preprocessed_obss.goal.long().unsqueeze(1)], dim=1)
+        # if self.argmax:
+        #     # actions = dist.probs.max(1, keepdim=True)[1]
+        #     actions = torch.argmax(dist[...,step], dim=1)
+        # else:
+        #     actions = dist.sample()
             
-            # if self.acmodel.recurrent:
-            #     dist, self.memories, = self.acmodel(preprocessed_obss, self.memories, step, self.attn_mask, return_dist=(~self.argmax))
-            # else:
-            #     dist, _ = self.acmodel(preprocessed_obss, attn_mask=self.attn_mask, return_dist=(~self.argmax))
-
-            dist, embed = self.acmodel(preprocessed_obss.image, self.goal, step, self.attn_mask, return_embed=True, return_dist=False)
-
-        if self.argmax:
-            # actions = dist.probs.max(1, keepdim=True)[1]
-            actions = torch.argmax(dist[...,step], dim=1)
-        else:
-            actions = dist.sample()
-
+        actions = torch.argmax(act_logits[...,step], dim=-1)
         actions = actions.squeeze()
 
-        if not torch.sum(preprocessed_obss.asked):
-            actions = torch.tensor([16])
+        # if not torch.sum(preprocessed_obss.asked):
+        #     actions = torch.tensor([16])
         # else:
         #     # breakpoint()
         #     print((self.acmodel.step - 1) % self.acmodel.max_len, ':', actions)
 
-        return actions.cpu().numpy()
+        if self.get_embed:
+            return actions.cpu().numpy(), embed.cpu().numpy()
+        else:
+            return actions.cpu().numpy()
 
     def get_action(self, obs, step):
         return self.get_actions([obs], step)
 
     def analyze_feedbacks(self, rewards, dones):
-        if self.acmodel.recurrent:
-            masks = 1 - torch.tensor(dones, dtype=torch.float, device=device).unsqueeze(1)
-            self.memories *= masks
+        masks = 1 - torch.tensor(dones, dtype=torch.float, device=device).unsqueeze(1)
+        acc = torch.sum(torch.tensor(rewards)) / torch.sum(torch.arange(0, self.max_frames) * masks)
+        return acc.cpu().numpy()
+        # if self.acmodel.recurrent:
+        #     self.memories *= masks
 
     def analyze_feedback(self, reward, done):
         return self.analyze_feedbacks([reward], [done])

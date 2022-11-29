@@ -45,11 +45,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set seed for all randomness sources
-
     utils.seed(args.seed)
 
     # Set device
-
     print(f"Device: {device}\n")
 
     # Load environments
@@ -67,19 +65,15 @@ if __name__ == "__main__":
     print("Environments loaded\n")
 
     # Load agent
-
     model_dir = utils.get_model_dir(args.model)
     agent = utils.Agent(env.observation_space, env.action_space, model_dir, args, num_envs=args.procs)
     print("Agent loaded\n")
 
     # Initialize logs
-
     logs = {"num_frames_per_episode": [], "return_per_episode": []}
 
     # Run agent
-
     start_time = time.time()
-
     obss = env.reset()
 
     log_done_counter = 0
@@ -92,7 +86,8 @@ if __name__ == "__main__":
         step += 1
         obss, rewards, terminateds, truncateds, _ = env.step(actions, )
         dones = tuple(a | b for a, b in zip(terminateds, truncateds))
-        agent.analyze_feedbacks(rewards, dones)
+        acc = agent.analyze_feedbacks(rewards, dones)
+        
 
         log_episode_return += torch.tensor(rewards, device=device, dtype=torch.float)
         log_episode_num_frames += torch.ones(args.procs, device=device)

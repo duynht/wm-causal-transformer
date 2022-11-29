@@ -41,11 +41,9 @@ parser.add_argument("--max-delay-frames", type=int, default=5,
 args = parser.parse_args()
 
 # Set seed for all randomness sources
-
 utils.seed(args.seed)
 
 # Set device
-
 print(f"Device: {device}\n")
 
 # Load environment
@@ -71,7 +69,6 @@ print("Agent loaded\n")
 
 if args.gif:
     from array2gif import write_gif
-
     frames = []
 
 # Create a window to view the environment
@@ -91,6 +88,7 @@ for episode in range(args.episodes):
         # agent.analyze_feedback(reward, done)
 
         if done or env.window.closed:
+            agent.reset_()
             break
 
     if env.window.closed:

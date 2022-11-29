@@ -7,9 +7,10 @@ import sys
 
 import utils
 from utils import device
-from model import ACModel
+# from model import model
 from visual_transformer import CausalVisionTransformer
-from compact_transformer import CCT
+from gpt import DecisionTransformer
+# from compact_transformer import CCT
 from working_memory_env.envs.grid_world import DMTSGridEnv
 import torchvision
 
@@ -117,23 +118,31 @@ if __name__ == "__main__":
 
     # Load model
 
-    # acmodel = ACModel(obs_space, envs[0].action_space, args.mem, args.text)
-    # if "model_state" in status:
-    #     acmodel.load_state_dict(status["model_state"])
-    acmodel = CausalVisionTransformer(
-        in_channels=obs_space["image"][2],
-        out_channels=32,
-        kernel_size=3,
+    model = DecisionTransformer(
+        state_dim=2,
+        act_dim=envs[0].action_space.n,
+        n_blocks=args.nlayers,
+        h_dim=args.d_model,
+        n_heads=args.nhead,
+        context_len=args.max_delay_frames+3,
+        drop_p=0.5,
         obs_space=obs_space,
-        action_space=envs[0].action_space,
-        d_model=args.d_model,
-        nhead=args.nhead,
-        d_hid=args.d_model,
-        nlayers=args.nlayers,
-        max_len=args.max_delay_frames+3,
     )
+
+    # model = CausalVisionTransformer(
+    #     in_channels=obs_space["image"][2],
+    #     out_channels=32,
+    #     kernel_size=3,
+    #     obs_space=obs_space,
+    #     action_space=envs[0].action_space,
+    #     d_model=args.d_model,
+    #     nhead=args.nhead,
+    #     d_hid=args.d_model,
+    #     nlayers=args.nlayers,
+    #     max_len=args.max_delay_frames+3,
+    # )
     
-    # acmodel = CCT(
+    # model = CCT(
     #     img_width=args.tile_size * args.grid_size * (args.max_delay_frames + 3),
     #     img_height=args.tile_size * args.grid_size,
     #     num_layers=args.nlayers,
@@ -146,28 +155,21 @@ if __name__ == "__main__":
     #     num_classes=args.grid_size * args.grid_size + 1,
     # )
     
-    acmodel.to(device)
+    model.to(device)
     txt_logger.info("Model loaded\n")
-    txt_logger.info("{}\n".format(acmodel))
+    txt_logger.info("{}\n".format(model))
 
     # Load algo
 
     # if args.algo == 'dmts':
     algo = torch_ac.DMTSAlgo(
         envs, 
-        acmodel, 
+        model, 
         device,
         args.max_delay_frames + 3, 
         args.lr, 
         preprocess_obss=preprocess_obss
     )
-
-    # elif args.algo =='pure_supervised':
-
-
-    # else:
-    #     raise ValueError("Incorrect algorithm name: {}".format(args.algo))
-
     if "optimizer_state" in status:
         algo.optimizer.load_state_dict(status["optimizer_state"])
     txt_logger.info("Optimizer loaded\n")
@@ -181,11 +183,6 @@ if __name__ == "__main__":
     while num_frames < args.frames:
         # Update model parameters
         update_start_time = time.time()
-        # exps, logs1 = algo.collect_experiences()
-        # logs2 = algo.update_parameters(exps)
-        # logs = {**logs1, **logs2}
-        # if num_frames / args.frames >= 0.5:
-        #     breakpoint()
         train_log = algo.update()
         update_end_time = time.time()
 
@@ -194,50 +191,14 @@ if __name__ == "__main__":
         tb_writer.add_scalar('Loss', train_log['loss'], update)
         # tb_writer.add_scalar('Accuracy', utils.synthesize(train_log('acc')).values(), update)
         tb_writer.add_scalar('Accuracy', train_log['acc'], update)
-        # tb_writer.add_graph(acmodel, train_log["final_input"])
+        # tb_writer.add_graph(model, train_log["final_input"])
         # tb_writer.add_embedding(train_log["embed"], metadata=train_log["labels"], label_img=train_log["img"])
         num_frames += train_log["num_frames"]
         txt_logger.info(f'Loss: {train_log["loss"]} Acc: {train_log["acc"]}')
 
-        # Print logs
-
-        # if update % args.log_interval == 0:
-        #     fps = logs["num_frames"] / (update_end_time - update_start_time)
-        #     duration = int(time.time() - start_time)
-        #     return_per_episode = utils.synthesize(logs["return_per_episode"])
-        #     rreturn_per_episode = utils.synthesize(logs["reshaped_return_per_episode"])
-        #     num_frames_per_episode = utils.synthesize(logs["num_frames_per_episode"])
-
-        #     # header = ["update", "frames", "FPS", "duration"]
-        #     # data = [update, num_frames, fps, duration]
-        #     # header += ["rreturn_" + key for key in rreturn_per_episode.keys()]
-        #     # data += rreturn_per_episode.values()
-        #     # header += ["num_frames_" + key for key in num_frames_per_episode.keys()]
-        #     # data += num_frames_per_episode.values()
-        #     # header += ["entropy", "value", "policy_loss", "value_loss", "grad_norm"]
-        #     # data += [logs["entropy"], logs["value"], logs["policy_loss"], logs["value_loss"], logs["grad_norm"]]
-
-        #     txt_logger.info(
-        #         "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f}"
-        #         .format(*data))
-
-        #     header += ["return_" + key for key in return_per_episode.keys()]
-        #     data += return_per_episode.values()
-
-        #     if status["num_frames"] == 0:
-        #         csv_logger.writerow(header)
-        #     csv_logger.writerow(data)
-        #     csv_file.flush()
-
-        #     for field, value in zip(header, data):
-        #         tb_writer.add_scalar(field, value, num_frames)
-
-        # Save status
-
         if args.save_interval > 0 and update % args.save_interval == 0:
             status = {"num_frames": num_frames, "update": update,
-                    #   "model_state": acmodel.state_dict(), "optimizer_state": algo.optimizer.state_dict()}
-                      "model_state": acmodel.state_dict(), "optimizer_state": algo.optimizer.optimizer.state_dict()}
+                      "model_state": model.state_dict(), "optimizer_state": algo.optimizer.state_dict()}
             if hasattr(preprocess_obss, "vocab"):
                 status["vocab"] = preprocess_obss.vocab.vocab
             utils.save_status(status, model_dir)
