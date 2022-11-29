@@ -147,8 +147,6 @@ class DMTSAlgo(ABC):
         loss.backward()
         self.optimizer.step()
         
-        # breakpoint()
-        
         logs = {
             "loss": loss.item(),
             "acc": acc,

@@ -21,8 +21,8 @@ parser.add_argument("--argmax", action="store_true", default=False,
                     help="select the action with highest probability (default: False)")
 parser.add_argument("--pause", type=float, default=0.1,
                     help="pause duration between two consequent actions of the agent (default: 0.1)")
-parser.add_argument("--gif", type=str, default=None,
-                    help="store output as gif with the given filename")
+parser.add_argument("--gif", action="store_true",
+                    help="store output as <model>.gif ")
 parser.add_argument("--episodes", type=int, default=1000000,
                     help="number of episodes to visualize")
 parser.add_argument("--tile-size", type=int, default=4,
@@ -34,7 +34,7 @@ parser.add_argument("--d_model", type=int, default=10,
 parser.add_argument("--nhead", type=int, default=1,
                     help="transformer attention heads")
 parser.add_argument("--nlayers", type=int, default=2,
-                    help="transformer MLP layers")
+                    help="transformer blocks")
 parser.add_argument("--max-delay-frames", type=int, default=5,
                     help="maximum number of delay frames per episode")
 
@@ -80,7 +80,7 @@ for episode in range(args.episodes):
     while True:
         env.render()
         if args.gif:
-            frames.append(numpy.moveaxis(env.get_frame(), 2, 0))
+            frames.append(numpy.moveaxis(env.get_frame(args.tile_size), 2, 0))
 
         action = agent.get_action(obs, env.step_count)
         obs, reward, terminated, truncated, _ = env.step(action)
@@ -96,5 +96,5 @@ for episode in range(args.episodes):
 
 if args.gif:
     print("Saving gif... ", end="")
-    write_gif(numpy.array(frames), args.gif+".gif", fps=1/args.pause)
+    write_gif(numpy.array(frames), args.model+".gif", fps=1/args.pause)
     print("Done.")

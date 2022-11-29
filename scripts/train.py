@@ -15,10 +15,6 @@ from working_memory_env.envs.grid_world import DMTSGridEnv
 parser = argparse.ArgumentParser()
 
 # General parameters
-# parser.add_argument("--algo", required=True,
-#                     help="algorithm to use: a2c | ppo (REQUIRED)")
-# parser.add_argument("--env", required=True,
-#                     help="name of the environment to train on (REQUIRED)")
 parser.add_argument("--model", default=None,
                     help="name of the model (default: {ENV}_{ALGO}_{TIME})")
 parser.add_argument("--seed", type=int, default=1,
@@ -40,13 +36,11 @@ parser.add_argument("--grid-size", type=int, default=4,
 parser.add_argument("--d_model", type=int, default=10,
                     help="transformer embedding size")
 parser.add_argument("--nlayers", type=int, default=2,
-                    help="transformer MLP layers")
+                    help="transformer blocks")
 parser.add_argument("--nhead", type=int, default=1,
                     help="transformer attention heads")
 parser.add_argument("--max-delay-frames", type=int, default=5,
                     help="maximum number of delay frames per episode")
-# parser.add_argument("--frames-per-proc", type=int, default=None,
-#                     help="number of frames per process before update (default: 5 for A2C and 128 for PPO)")
 parser.add_argument("--lr", type=float, default=0.001,
                     help="learning rate (default: 0.001)")
 parser.add_argument("--device", default="cpu")
